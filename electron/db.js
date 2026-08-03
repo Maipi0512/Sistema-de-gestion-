@@ -76,24 +76,60 @@ async function verificarLogin(usuario, password) {
 
 async function listarProductos(filtro = '') {
   const { rows } = await pool.query(
-    `SELECT * FROM productos
-     WHERE activo = TRUE
-       AND ($1 = '' OR nombre ILIKE '%' || $1 || '%' OR codigo ILIKE '%' || $1 || '%')
-     ORDER BY nombre ASC`,
+    `SELECT p.*, COALESCE(array_agg(pc.color) FILTER (WHERE pc.color IS NOT NULL), '{}') AS colores
+     FROM productos p
+     LEFT JOIN producto_colores pc ON pc.producto_id = p.id
+     WHERE p.activo = TRUE
+       AND ($1 = '' OR p.nombre ILIKE '%' || $1 || '%' OR p.codigo ILIKE '%' || $1 || '%')
+     GROUP BY p.id
+     ORDER BY p.nombre ASC`,
     [filtro]
   );
   return rows;
 }
 
 async function crearProducto(producto) {
-  const { codigo, nombre, descripcion, precio_costo, precio_venta, unidad_medida, stock_inicial, stock_minimo } = producto;
+  const {
+    codigo, nombre, descripcion, categoria, precio_costo, precio_venta,
+    precio_paquete, unidades_por_paquete, unidad_medida, stock_inicial, stock_minimo,
+  } = producto;
   const { rows } = await pool.query(
-    `INSERT INTO productos (codigo, nombre, descripcion, precio_costo, precio_venta, unidad_medida, stock_actual, stock_minimo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO productos (codigo, nombre, descripcion, categoria, precio_costo, precio_venta, precio_paquete, unidades_por_paquete, unidad_medida, stock_actual, stock_minimo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
-    [codigo || null, nombre, descripcion || null, precio_costo || 0, precio_venta, unidad_medida || 'unidad', stock_inicial || 0, stock_minimo || 0]
+    [
+      codigo || null, nombre, descripcion || null, categoria || null,
+      precio_costo || 0, precio_venta, precio_paquete || null, unidades_por_paquete || null,
+      unidad_medida || 'unidad', stock_inicial || 0, stock_minimo || 0,
+    ]
   );
   return rows[0];
+}
+
+// ------------------------------------------------------------
+// COLORES DE PRODUCTO
+// Lista informativa por producto (el stock es único y compartido,
+// no se lleva stock separado por color).
+// ------------------------------------------------------------
+
+async function agregarColorProducto(productoId, color) {
+  const { rows } = await pool.query(
+    `INSERT INTO producto_colores (producto_id, color) VALUES ($1, $2)
+     ON CONFLICT (producto_id, color) DO NOTHING
+     RETURNING *`,
+    [productoId, color]
+  );
+  return rows[0] || null;
+}
+
+async function eliminarColorProducto(productoId, color) {
+  await pool.query(`DELETE FROM producto_colores WHERE producto_id = $1 AND color = $2`, [productoId, color]);
+  return { productoId, color };
+}
+
+async function listarColoresDistintos() {
+  const { rows } = await pool.query(`SELECT DISTINCT color FROM producto_colores ORDER BY color`);
+  return rows.map((r) => r.color);
 }
 
 async function actualizarProducto(id, cambios) {
@@ -272,7 +308,8 @@ async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
     const ventaId = ventaRows[0].id;
 
     for (const item of items) {
-      const { producto_id, cantidad, precio_unitario } = item;
+      const { producto_id, cantidad, precio_unitario, color, unidades_por_paquete } = item;
+      const cantidadStock = cantidad * (unidades_por_paquete || 1);
 
       const { rows: prodRows } = await client.query(
         'SELECT stock_actual FROM productos WHERE id = $1 FOR UPDATE',
@@ -281,23 +318,23 @@ async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
       if (prodRows.length === 0) throw new Error(`Producto ${producto_id} no encontrado`);
 
       const stockActual = Number(prodRows[0].stock_actual);
-      if (stockActual < cantidad) {
+      if (stockActual < cantidadStock) {
         throw new Error(`Stock insuficiente para el producto ${producto_id}`);
       }
-      const nuevoStock = stockActual - cantidad;
+      const nuevoStock = stockActual - cantidadStock;
 
       await client.query('UPDATE productos SET stock_actual = $1 WHERE id = $2', [nuevoStock, producto_id]);
 
       await client.query(
-        `INSERT INTO venta_detalle (venta_id, producto_id, cantidad, precio_unitario, subtotal)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [ventaId, producto_id, cantidad, precio_unitario, cantidad * precio_unitario]
+        `INSERT INTO venta_detalle (venta_id, producto_id, cantidad, precio_unitario, subtotal, color, unidades_por_paquete)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [ventaId, producto_id, cantidad, precio_unitario, cantidad * precio_unitario, color || null, unidades_por_paquete || null]
       );
 
       await client.query(
         `INSERT INTO movimientos_stock (producto_id, tipo, motivo, cantidad, stock_resultante, venta_id)
          VALUES ($1, 'salida', 'venta', $2, $3, $4)`,
-        [producto_id, cantidad, nuevoStock, ventaId]
+        [producto_id, cantidadStock, nuevoStock, ventaId]
       );
     }
 
@@ -356,6 +393,9 @@ module.exports = {
   crearProducto,
   actualizarProducto,
   ajustarStock,
+  agregarColorProducto,
+  eliminarColorProducto,
+  listarColoresDistintos,
   crearVenta,
   listarVentas,
   obtenerDetalleVenta,

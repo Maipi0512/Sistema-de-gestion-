@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('api', {
     actualizar: (id, cambios) => ipcRenderer.invoke('productos:actualizar', id, cambios),
     ajustarStock: (id, cantidad, motivo, notas) =>
       ipcRenderer.invoke('productos:ajustarStock', id, cantidad, motivo, notas),
+    agregarColor: (productoId, color) => ipcRenderer.invoke('productos:agregarColor', productoId, color),
+    eliminarColor: (productoId, color) => ipcRenderer.invoke('productos:eliminarColor', productoId, color),
+    coloresDistintos: () => ipcRenderer.invoke('productos:coloresDistintos'),
   },
   ventas: {
     crear: (items, metodoPago, usuarioId) => ipcRenderer.invoke('ventas:crear', items, metodoPago, usuarioId),

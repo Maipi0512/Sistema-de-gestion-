@@ -128,3 +128,28 @@ button:disabled { background: #ccc; cursor: not-allowed; }
 
 .total { font-size: 20px; font-weight: bold; }
 .error { color: #c0392b; }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f5eee9;
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.chip button {
+  background: none;
+  color: #6b4a3a;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}

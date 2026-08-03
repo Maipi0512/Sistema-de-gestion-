@@ -25,21 +25,37 @@ CREATE TABLE usuarios (
 -- (ventas o ajustes), nunca se edita directo.
 -- ------------------------------------------------------------
 CREATE TABLE productos (
-    id              SERIAL PRIMARY KEY,
-    codigo          VARCHAR(50) UNIQUE,
-    nombre          VARCHAR(200) NOT NULL,
-    descripcion     TEXT,
-    precio_costo    NUMERIC(12,2) NOT NULL DEFAULT 0,
-    precio_venta    NUMERIC(12,2) NOT NULL,
-    unidad_medida   VARCHAR(20) NOT NULL DEFAULT 'unidad', -- 'unidad', 'metro', 'rollo', 'paquete'
-    stock_actual    NUMERIC(12,2) NOT NULL DEFAULT 0,
-    stock_minimo    NUMERIC(12,2) NOT NULL DEFAULT 0,      -- dispara alerta de stock bajo
-    activo          BOOLEAN NOT NULL DEFAULT TRUE,
-    creado_en       TIMESTAMP NOT NULL DEFAULT NOW(),
-    actualizado_en  TIMESTAMP NOT NULL DEFAULT NOW()
+    id                     SERIAL PRIMARY KEY,
+    codigo                 VARCHAR(50) UNIQUE,
+    nombre                 VARCHAR(200) NOT NULL,
+    descripcion            TEXT,
+    categoria              VARCHAR(50),
+    precio_costo           NUMERIC(12,2) NOT NULL DEFAULT 0,
+    precio_venta           NUMERIC(12,2) NOT NULL,
+    precio_paquete         NUMERIC(12,2),                       -- precio si se vende por paquete (opcional)
+    unidades_por_paquete   NUMERIC(12,2),                       -- cuántas unidades trae ese paquete
+    unidad_medida          VARCHAR(20) NOT NULL DEFAULT 'unidad', -- 'unidad', 'metro', 'rollo', 'paquete'
+    stock_actual           NUMERIC(12,2) NOT NULL DEFAULT 0,
+    stock_minimo           NUMERIC(12,2) NOT NULL DEFAULT 0,      -- dispara alerta de stock bajo
+    activo                 BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en              TIMESTAMP NOT NULL DEFAULT NOW(),
+    actualizado_en         TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_productos_nombre ON productos USING gin (to_tsvector('spanish', nombre));
+
+-- ------------------------------------------------------------
+-- COLORES POR PRODUCTO
+-- Lista informativa de colores disponibles para un producto
+-- (ej. cierres). El stock es único y compartido por producto,
+-- no se lleva stock separado por color.
+-- ------------------------------------------------------------
+CREATE TABLE producto_colores (
+    id           SERIAL PRIMARY KEY,
+    producto_id  INTEGER NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
+    color        VARCHAR(50) NOT NULL,
+    UNIQUE (producto_id, color)
+);
 
 -- ------------------------------------------------------------
 -- CAJA — control de apertura/cierre de caja por turno o por día
@@ -119,12 +135,14 @@ CREATE INDEX idx_ventas_caja ON ventas(caja_sesion_id);
 -- DETALLE DE VENTA
 -- ------------------------------------------------------------
 CREATE TABLE venta_detalle (
-    id              SERIAL PRIMARY KEY,
-    venta_id        INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
-    producto_id     INTEGER NOT NULL REFERENCES productos(id),
-    cantidad        NUMERIC(12,2) NOT NULL,
-    precio_unitario NUMERIC(12,2) NOT NULL,
-    subtotal        NUMERIC(12,2) NOT NULL
+    id                    SERIAL PRIMARY KEY,
+    venta_id              INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+    producto_id           INTEGER NOT NULL REFERENCES productos(id),
+    cantidad              NUMERIC(12,2) NOT NULL,
+    precio_unitario       NUMERIC(12,2) NOT NULL,
+    subtotal              NUMERIC(12,2) NOT NULL,
+    color                 VARCHAR(50),          -- color elegido, si el producto tiene colores
+    unidades_por_paquete  NUMERIC(12,2)         -- si se vendió por paquete, cuántas unidades traía
 );
 
 CREATE INDEX idx_venta_detalle_venta ON venta_detalle(venta_id);

@@ -75,6 +75,7 @@ export default function Historial() {
                       <thead>
                         <tr>
                           <th>Producto</th>
+                          <th>Color</th>
                           <th>Cantidad</th>
                           <th>Precio unit.</th>
                           <th>Subtotal</th>
@@ -84,7 +85,11 @@ export default function Historial() {
                         {detalleAbierto.items.map((it) => (
                           <tr key={it.id}>
                             <td>{it.producto_nombre}</td>
-                            <td>{it.cantidad}</td>
+                            <td>{it.color || '-'}</td>
+                            <td>
+                              {it.cantidad}
+                              {it.unidades_por_paquete ? ` paquete(s) x ${it.unidades_por_paquete}` : ''}
+                            </td>
                             <td>${Number(it.precio_unitario).toFixed(2)}</td>
                             <td>${Number(it.subtotal).toFixed(2)}</td>
                           </tr>
