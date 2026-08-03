@@ -1,0 +1,130 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #faf7f5;
+  color: #2b2b2b;
+}
+
+.layout {
+  display: flex;
+  height: 100vh;
+}
+
+.menu {
+  width: 200px;
+  background: #6b4a3a;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.titulo {
+  font-size: 18px;
+  margin-bottom: 24px;
+}
+
+.menu-item {
+  background: none;
+  border: none;
+  color: white;
+  text-align: left;
+  padding: 10px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.menu-item:hover { background: rgba(255,255,255,0.1); }
+.menu-item.activo { background: rgba(255,255,255,0.25); font-weight: bold; }
+
+.contenido {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.tarjeta {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tabla th, .tabla td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.stock-bajo { color: #c0392b; font-weight: bold; }
+
+.barra-acciones {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.fila-form {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+input, select {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+button {
+  background: #6b4a3a;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:disabled { background: #ccc; cursor: not-allowed; }
+
+.lista-resultados {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.lista-resultados li {
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.lista-resultados li:hover { background: #f5eee9; }
+
+.total { font-size: 20px; font-weight: bold; }
+.error { color: #c0392b; }
