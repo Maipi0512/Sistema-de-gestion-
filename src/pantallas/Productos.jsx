@@ -26,6 +26,7 @@ export default function Productos() {
   const [coloresForm, setColoresForm] = useState([]);
   const [colorInput, setColorInput] = useState('');
   const [coloresSugeridos, setColoresSugeridos] = useState([]);
+  const [sumaStock, setSumaStock] = useState({});
 
   const cargarProductos = (filtro = '') => {
     window.api.productos.listar(filtro).then(setProductos);
@@ -105,6 +106,18 @@ export default function Productos() {
       await window.api.productos.eliminarColor(editandoId, color);
     }
     setColoresForm(coloresForm.filter((c) => c !== color));
+  };
+
+  const handleCambioSumaStock = (id) => (e) => {
+    setSumaStock({ ...sumaStock, [id]: e.target.value });
+  };
+
+  const handleSumarStock = async (id) => {
+    const cantidad = parseFloat(sumaStock[id]);
+    if (!cantidad) return;
+    await window.api.productos.ajustarStock(id, cantidad, 'ajuste_manual', 'Carga de stock');
+    setSumaStock({ ...sumaStock, [id]: '' });
+    cargarProductos(busqueda);
   };
 
   const handleGuardar = async (e) => {
@@ -294,8 +307,19 @@ export default function Productos() {
               <td>{p.categoria || '-'}</td>
               <td>{p.colores && p.colores.length > 0 ? p.colores.join(', ') : '-'}</td>
               <td>${Number(p.precio_venta).toFixed(2)}</td>
-              <td className={Number(p.stock_actual) <= Number(p.stock_minimo) ? 'stock-bajo' : ''}>
-                {p.stock_actual} {p.unidad_medida}
+              <td className={Number(p.stock_minimo) > 0 && Number(p.stock_actual) <= Number(p.stock_minimo) ? 'stock-bajo' : ''}>
+                <div>{p.stock_actual} {p.unidad_medida}</div>
+                <div className="fila-form" style={{ marginTop: 4, marginBottom: 0 }}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="sumar"
+                    style={{ width: 70 }}
+                    value={sumaStock[p.id] || ''}
+                    onChange={handleCambioSumaStock(p.id)}
+                  />
+                  <button type="button" onClick={() => handleSumarStock(p.id)}>+ Stock</button>
+                </div>
               </td>
               <td>
                 <button onClick={() => handleEditar(p)}>Editar</button>

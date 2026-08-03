@@ -318,9 +318,6 @@ async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
       if (prodRows.length === 0) throw new Error(`Producto ${producto_id} no encontrado`);
 
       const stockActual = Number(prodRows[0].stock_actual);
-      if (stockActual < cantidadStock) {
-        throw new Error(`Stock insuficiente para el producto ${producto_id}`);
-      }
       const nuevoStock = stockActual - cantidadStock;
 
       await client.query('UPDATE productos SET stock_actual = $1 WHERE id = $2', [nuevoStock, producto_id]);

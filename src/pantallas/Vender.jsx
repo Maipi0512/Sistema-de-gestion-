@@ -68,11 +68,6 @@ export default function Vender({ usuarioActual }) {
 
   const precioEfectivo = (it) => (it.modo === 'paquete' ? it.precioPaquete : it.precioUnidad);
 
-  const maxCantidad = (it) =>
-    it.modo === 'paquete' && it.unidadesPorPaquete
-      ? Math.floor(it.stock_disponible / it.unidadesPorPaquete)
-      : it.stock_disponible;
-
   const total = carrito.reduce((acc, it) => acc + it.cantidad * precioEfectivo(it), 0);
 
   const confirmarVenta = async () => {
@@ -160,7 +155,6 @@ export default function Vender({ usuarioActual }) {
                   type="number"
                   min="0.01"
                   step="0.01"
-                  max={maxCantidad(it)}
                   value={it.cantidad}
                   onChange={(e) => cambiarCantidad(it.producto_id, e.target.value)}
                 />

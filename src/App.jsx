@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logo from './assets/logo.png';
 import Login from './pantallas/Login.jsx';
 import Productos from './pantallas/Productos.jsx';
 import Vender from './pantallas/Vender.jsx';
@@ -33,7 +34,9 @@ export default function App() {
     <div className="layout">
       <nav className="menu">
         <div>
-          <h1 className="titulo">Almacén de Costura</h1>
+          <div className="logo-badge">
+            <img src={logo} alt="Almacén de Costura" />
+          </div>
           {Object.entries(PANTALLAS).map(([key, { label }]) => (
             <button
               key={key}

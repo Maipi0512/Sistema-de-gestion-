@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logo from '../assets/logo.png';
 
 export default function Login({ onLogin }) {
   const [usuario, setUsuario] = useState('');
@@ -21,9 +22,9 @@ export default function Login({ onLogin }) {
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#faf7f5' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--color-bg)' }}>
       <form onSubmit={handleSubmit} className="tarjeta" style={{ width: 320 }}>
-        <h2 style={{ marginTop: 0, textAlign: 'center' }}>Almacén de Costura</h2>
+        <img src={logo} alt="Almacén de Costura" style={{ width: '100%', maxWidth: 220, display: 'block', margin: '0 auto 16px' }} />
         <label>
           Usuario
           <input required value={usuario} onChange={(e) => setUsuario(e.target.value)} autoFocus />
