@@ -17,7 +17,7 @@ export default function App() {
 
   const PANTALLAS = {
     vender: { label: 'Vender', componente: <Vender usuarioActual={usuarioActual} /> },
-    productos: { label: 'Productos', componente: <Productos /> },
+    productos: { label: 'Productos', componente: <Productos usuarioActual={usuarioActual} /> },
     historial: { label: 'Historial de ventas', componente: <Historial /> },
     caja: { label: 'Caja', componente: <Caja /> },
     ...(usuarioActual.rol === 'admin'

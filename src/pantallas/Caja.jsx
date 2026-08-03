@@ -101,7 +101,7 @@ export default function Caja() {
       {caja && (
         <>
           <div className="tarjeta">
-            <h3>Caja abierta desde {new Date(caja.fecha_apertura).toLocaleString('es-AR')}</h3>
+            <h3>Caja abierta desde {new Date(caja.fecha_apertura).toLocaleString('es-AR', { hour12: false })}</h3>
             <p>Monto de apertura: ${Number(caja.monto_apertura).toFixed(2)}</p>
 
             {resumen && (
@@ -157,7 +157,7 @@ export default function Caja() {
                 <tbody>
                   {movimientos.map((m) => (
                     <tr key={m.id}>
-                      <td>{new Date(m.creado_en).toLocaleTimeString('es-AR')}</td>
+                      <td>{new Date(m.creado_en).toLocaleTimeString('es-AR', { hour12: false })}</td>
                       <td>{m.tipo === 'egreso' ? 'Egreso' : 'Ingreso'}</td>
                       <td>{m.concepto}</td>
                       <td className={m.tipo === 'egreso' ? 'stock-bajo' : ''}>${Number(m.monto).toFixed(2)}</td>
@@ -190,8 +190,8 @@ export default function Caja() {
           <tbody>
             {historialSesiones.map((s) => (
               <tr key={s.id}>
-                <td>{new Date(s.fecha_apertura).toLocaleString('es-AR')}</td>
-                <td>{s.fecha_cierre ? new Date(s.fecha_cierre).toLocaleString('es-AR') : '—'}</td>
+                <td>{new Date(s.fecha_apertura).toLocaleString('es-AR', { hour12: false })}</td>
+                <td>{s.fecha_cierre ? new Date(s.fecha_cierre).toLocaleString('es-AR', { hour12: false }) : '—'}</td>
                 <td>${Number(s.monto_apertura).toFixed(2)}</td>
                 <td>{s.monto_esperado != null ? `$${Number(s.monto_esperado).toFixed(2)}` : '—'}</td>
                 <td>{s.monto_contado != null ? `$${Number(s.monto_contado).toFixed(2)}` : '—'}</td>

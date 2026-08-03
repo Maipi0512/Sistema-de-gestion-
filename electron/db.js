@@ -49,9 +49,18 @@ async function crearUsuario({ nombre, usuario, password, rol }) {
 
 async function listarUsuarios() {
   const { rows } = await pool.query(
-    `SELECT id, nombre, usuario, rol, activo FROM usuarios ORDER BY nombre`
+    `SELECT id, nombre, usuario, rol, activo, puede_editar_productos FROM usuarios ORDER BY nombre`
   );
   return rows;
+}
+
+async function actualizarPermisoProducto(usuarioId, puedeEditar) {
+  const { rows } = await pool.query(
+    `UPDATE usuarios SET puede_editar_productos = $1 WHERE id = $2
+     RETURNING id, nombre, usuario, rol, activo, puede_editar_productos`,
+    [puedeEditar, usuarioId]
+  );
+  return rows[0];
 }
 
 // Verifica usuario + contraseña. Lanza error si no coincide,
@@ -74,9 +83,18 @@ async function verificarLogin(usuario, password) {
 // PRODUCTOS
 // ------------------------------------------------------------
 
+// Si el producto tiene colores cargados, el stock que se muestra es la
+// suma del stock de cada color (el stock_actual de la fila de productos
+// deja de usarse para esos casos, cada color lleva su propia cantidad).
 async function listarProductos(filtro = '') {
   const { rows } = await pool.query(
-    `SELECT p.*, COALESCE(array_agg(pc.color) FILTER (WHERE pc.color IS NOT NULL), '{}') AS colores
+    `SELECT p.*,
+       COALESCE(
+         json_agg(json_build_object('color', pc.color, 'stock', pc.stock) ORDER BY pc.color)
+           FILTER (WHERE pc.color IS NOT NULL),
+         '[]'
+       ) AS colores,
+       CASE WHEN COUNT(pc.id) > 0 THEN COALESCE(SUM(pc.stock), 0) ELSE p.stock_actual END AS stock_actual
      FROM productos p
      LEFT JOIN producto_colores pc ON pc.producto_id = p.id
      WHERE p.activo = TRUE
@@ -108,8 +126,8 @@ async function crearProducto(producto) {
 
 // ------------------------------------------------------------
 // COLORES DE PRODUCTO
-// Lista informativa por producto (el stock es único y compartido,
-// no se lleva stock separado por color).
+// Cada color tiene su propio stock (ej. cierres, hilos) sin
+// necesidad de crear un producto aparte por cada color.
 // ------------------------------------------------------------
 
 async function agregarColorProducto(productoId, color) {
@@ -125,6 +143,15 @@ async function agregarColorProducto(productoId, color) {
 async function eliminarColorProducto(productoId, color) {
   await pool.query(`DELETE FROM producto_colores WHERE producto_id = $1 AND color = $2`, [productoId, color]);
   return { productoId, color };
+}
+
+async function sumarStockColor(productoId, color, cantidad) {
+  const { rows } = await pool.query(
+    `UPDATE producto_colores SET stock = stock + $1 WHERE producto_id = $2 AND color = $3 RETURNING *`,
+    [cantidad, productoId, color]
+  );
+  if (rows.length === 0) throw new Error('Color no encontrado para ese producto');
+  return rows[0];
 }
 
 async function listarColoresDistintos() {
@@ -310,17 +337,25 @@ async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
     for (const item of items) {
       const { producto_id, cantidad, precio_unitario, color, unidades_por_paquete } = item;
       const cantidadStock = cantidad * (unidades_por_paquete || 1);
+      let nuevoStock;
 
-      const { rows: prodRows } = await client.query(
-        'SELECT stock_actual FROM productos WHERE id = $1 FOR UPDATE',
-        [producto_id]
-      );
-      if (prodRows.length === 0) throw new Error(`Producto ${producto_id} no encontrado`);
-
-      const stockActual = Number(prodRows[0].stock_actual);
-      const nuevoStock = stockActual - cantidadStock;
-
-      await client.query('UPDATE productos SET stock_actual = $1 WHERE id = $2', [nuevoStock, producto_id]);
+      if (color) {
+        const { rows: colorRows } = await client.query(
+          'SELECT stock FROM producto_colores WHERE producto_id = $1 AND color = $2 FOR UPDATE',
+          [producto_id, color]
+        );
+        if (colorRows.length === 0) throw new Error(`Color "${color}" no encontrado para el producto ${producto_id}`);
+        nuevoStock = Number(colorRows[0].stock) - cantidadStock;
+        await client.query('UPDATE producto_colores SET stock = $1 WHERE producto_id = $2 AND color = $3', [nuevoStock, producto_id, color]);
+      } else {
+        const { rows: prodRows } = await client.query(
+          'SELECT stock_actual FROM productos WHERE id = $1 FOR UPDATE',
+          [producto_id]
+        );
+        if (prodRows.length === 0) throw new Error(`Producto ${producto_id} no encontrado`);
+        nuevoStock = Number(prodRows[0].stock_actual) - cantidadStock;
+        await client.query('UPDATE productos SET stock_actual = $1 WHERE id = $2', [nuevoStock, producto_id]);
+      }
 
       await client.query(
         `INSERT INTO venta_detalle (venta_id, producto_id, cantidad, precio_unitario, subtotal, color, unidades_por_paquete)
@@ -329,9 +364,9 @@ async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
       );
 
       await client.query(
-        `INSERT INTO movimientos_stock (producto_id, tipo, motivo, cantidad, stock_resultante, venta_id)
-         VALUES ($1, 'salida', 'venta', $2, $3, $4)`,
-        [producto_id, cantidadStock, nuevoStock, ventaId]
+        `INSERT INTO movimientos_stock (producto_id, tipo, motivo, cantidad, stock_resultante, venta_id, color)
+         VALUES ($1, 'salida', 'venta', $2, $3, $4, $5)`,
+        [producto_id, cantidadStock, nuevoStock, ventaId, color || null]
       );
     }
 
@@ -385,6 +420,7 @@ async function stockBajo() {
 module.exports = {
   crearUsuario,
   listarUsuarios,
+  actualizarPermisoProducto,
   verificarLogin,
   listarProductos,
   crearProducto,
@@ -392,6 +428,7 @@ module.exports = {
   ajustarStock,
   agregarColorProducto,
   eliminarColorProducto,
+  sumarStockColor,
   listarColoresDistintos,
   crearVenta,
   listarVentas,

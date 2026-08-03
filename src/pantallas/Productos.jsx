@@ -16,7 +16,8 @@ const PRODUCTO_VACIO = {
   stock_minimo: '',
 };
 
-export default function Productos() {
+export default function Productos({ usuarioActual }) {
+  const puedeEditar = usuarioActual?.rol === 'admin' || !!usuarioActual?.puede_editar_productos;
   const [productos, setProductos] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [form, setForm] = useState(PRODUCTO_VACIO);
@@ -90,14 +91,14 @@ export default function Productos() {
 
   const handleAgregarColor = async () => {
     const color = colorInput.trim();
-    if (!color || coloresForm.includes(color)) {
+    if (!color || coloresForm.some((c) => c.color === color)) {
       setColorInput('');
       return;
     }
     if (editandoId) {
       await window.api.productos.agregarColor(editandoId, color);
     }
-    setColoresForm([...coloresForm, color]);
+    setColoresForm([...coloresForm, { color, stock: 0 }]);
     setColorInput('');
   };
 
@@ -105,7 +106,16 @@ export default function Productos() {
     if (editandoId) {
       await window.api.productos.eliminarColor(editandoId, color);
     }
-    setColoresForm(coloresForm.filter((c) => c !== color));
+    setColoresForm(coloresForm.filter((c) => c.color !== color));
+  };
+
+  const handleSumarStockColorForm = async (color) => {
+    const clave = `form-${color}`;
+    const cantidad = parseFloat(sumaStock[clave]);
+    if (!cantidad || !editandoId) return;
+    await window.api.productos.sumarStockColor(editandoId, color, cantidad);
+    setColoresForm(coloresForm.map((c) => (c.color === color ? { ...c, stock: Number(c.stock) + cantidad } : c)));
+    setSumaStock({ ...sumaStock, [clave]: '' });
   };
 
   const handleCambioSumaStock = (id) => (e) => {
@@ -117,6 +127,15 @@ export default function Productos() {
     if (!cantidad) return;
     await window.api.productos.ajustarStock(id, cantidad, 'ajuste_manual', 'Carga de stock');
     setSumaStock({ ...sumaStock, [id]: '' });
+    cargarProductos(busqueda);
+  };
+
+  const handleSumarStockColor = async (id, color) => {
+    const clave = `${id}-${color}`;
+    const cantidad = parseFloat(sumaStock[clave]);
+    if (!cantidad) return;
+    await window.api.productos.sumarStockColor(id, color, cantidad);
+    setSumaStock({ ...sumaStock, [clave]: '' });
     cargarProductos(busqueda);
   };
 
@@ -144,8 +163,8 @@ export default function Productos() {
           ...cambiosComunes,
           stock_inicial: parseFloat(form.stock_inicial) || 0,
         });
-        for (const color of coloresForm) {
-          await window.api.productos.agregarColor(nuevo.id, color);
+        for (const c of coloresForm) {
+          await window.api.productos.agregarColor(nuevo.id, c.color);
         }
       }
 
@@ -168,13 +187,19 @@ export default function Productos() {
           value={busqueda}
           onChange={handleBuscar}
         />
-        <button onClick={handleNuevoProducto}>
-          {mostrarForm ? 'Cancelar' : '+ Nuevo producto'}
-        </button>
+        {puedeEditar && (
+          <button onClick={handleNuevoProducto}>
+            {mostrarForm ? 'Cancelar' : '+ Nuevo producto'}
+          </button>
+        )}
         <button onClick={() => window.api.export.productos()}>Exportar a Excel</button>
       </div>
 
-      {mostrarForm && (
+      {!puedeEditar && (
+        <p className="tarjeta">No tenés permiso para crear o editar productos. Pedile a un administrador que te lo habilite desde Vendedores.</p>
+      )}
+
+      {puedeEditar && mostrarForm && (
         <form className="tarjeta" onSubmit={handleGuardar}>
           {error && <p className="error">{error}</p>}
           <h3>{editandoId ? 'Editar producto' : 'Nuevo producto'}</h3>
@@ -275,9 +300,22 @@ export default function Productos() {
           {coloresForm.length > 0 && (
             <div className="chips">
               {coloresForm.map((c) => (
-                <span key={c} className="chip">
-                  {c}{' '}
-                  <button type="button" onClick={() => handleQuitarColor(c)}>×</button>
+                <span key={c.color} className="chip">
+                  {c.color} ({c.stock}){' '}
+                  {editandoId && (
+                    <>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="sumar"
+                        style={{ width: 55 }}
+                        value={sumaStock[`form-${c.color}`] || ''}
+                        onChange={handleCambioSumaStock(`form-${c.color}`)}
+                      />
+                      <button type="button" onClick={() => handleSumarStockColorForm(c.color)}>+</button>
+                    </>
+                  )}
+                  <button type="button" onClick={() => handleQuitarColor(c.color)}>×</button>
                 </span>
               ))}
             </div>
@@ -305,24 +343,55 @@ export default function Productos() {
               <td>{p.nombre}</td>
               <td>{p.codigo || '-'}</td>
               <td>{p.categoria || '-'}</td>
-              <td>{p.colores && p.colores.length > 0 ? p.colores.join(', ') : '-'}</td>
+              <td>
+                {p.colores && p.colores.length > 0
+                  ? p.colores.map((c) => `${c.color} (${c.stock})`).join(', ')
+                  : '-'}
+              </td>
               <td>${Number(p.precio_venta).toFixed(2)}</td>
               <td className={Number(p.stock_minimo) > 0 && Number(p.stock_actual) <= Number(p.stock_minimo) ? 'stock-bajo' : ''}>
-                <div>{p.stock_actual} {p.unidad_medida}</div>
-                <div className="fila-form" style={{ marginTop: 4, marginBottom: 0 }}>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="sumar"
-                    style={{ width: 70 }}
-                    value={sumaStock[p.id] || ''}
-                    onChange={handleCambioSumaStock(p.id)}
-                  />
-                  <button type="button" onClick={() => handleSumarStock(p.id)}>+ Stock</button>
-                </div>
+                {p.colores && p.colores.length > 0 ? (
+                  <>
+                    <div>{p.stock_actual} {p.unidad_medida} en total</div>
+                    {puedeEditar && p.colores.map((c) => {
+                      const clave = `${p.id}-${c.color}`;
+                      return (
+                        <div key={c.color} className="fila-form" style={{ marginTop: 4, marginBottom: 0, alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, width: 70 }}>{c.color} ({c.stock})</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="sumar"
+                            style={{ width: 60 }}
+                            value={sumaStock[clave] || ''}
+                            onChange={handleCambioSumaStock(clave)}
+                          />
+                          <button type="button" onClick={() => handleSumarStockColor(p.id, c.color)}>+</button>
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <>
+                    <div>{p.stock_actual} {p.unidad_medida}</div>
+                    {puedeEditar && (
+                      <div className="fila-form" style={{ marginTop: 4, marginBottom: 0 }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="sumar"
+                          style={{ width: 70 }}
+                          value={sumaStock[p.id] || ''}
+                          onChange={handleCambioSumaStock(p.id)}
+                        />
+                        <button type="button" onClick={() => handleSumarStock(p.id)}>+ Stock</button>
+                      </div>
+                    )}
+                  </>
+                )}
               </td>
               <td>
-                <button onClick={() => handleEditar(p)}>Editar</button>
+                {puedeEditar && <button onClick={() => handleEditar(p)}>Editar</button>}
               </td>
             </tr>
           ))}

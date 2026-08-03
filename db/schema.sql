@@ -16,7 +16,8 @@ CREATE TABLE usuarios (
     password_hash  VARCHAR(255) NOT NULL,
     rol            VARCHAR(20) NOT NULL DEFAULT 'vendedor' CHECK (rol IN ('admin', 'vendedor')),
     activo         BOOLEAN NOT NULL DEFAULT TRUE,
-    creado_en      TIMESTAMP NOT NULL DEFAULT NOW()
+    puede_editar_productos BOOLEAN NOT NULL DEFAULT FALSE, -- si un vendedor puede crear/editar productos y stock
+    creado_en      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ------------------------------------------------------------
@@ -38,8 +39,8 @@ CREATE TABLE productos (
     stock_actual           NUMERIC(12,2) NOT NULL DEFAULT 0,
     stock_minimo           NUMERIC(12,2) NOT NULL DEFAULT 0,      -- dispara alerta de stock bajo
     activo                 BOOLEAN NOT NULL DEFAULT TRUE,
-    creado_en              TIMESTAMP NOT NULL DEFAULT NOW(),
-    actualizado_en         TIMESTAMP NOT NULL DEFAULT NOW()
+    creado_en              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    actualizado_en         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_productos_nombre ON productos USING gin (to_tsvector('spanish', nombre));
@@ -54,6 +55,7 @@ CREATE TABLE producto_colores (
     id           SERIAL PRIMARY KEY,
     producto_id  INTEGER NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
     color        VARCHAR(50) NOT NULL,
+    stock        NUMERIC(12,2) NOT NULL DEFAULT 0,
     UNIQUE (producto_id, color)
 );
 
@@ -62,15 +64,15 @@ CREATE TABLE producto_colores (
 -- ------------------------------------------------------------
 CREATE TABLE caja_sesiones (
     id                 SERIAL PRIMARY KEY,
-    fecha_apertura     TIMESTAMP NOT NULL DEFAULT NOW(),
+    fecha_apertura     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     monto_apertura     NUMERIC(12,2) NOT NULL DEFAULT 0,   -- efectivo con el que se abre la caja
-    fecha_cierre       TIMESTAMP,
+    fecha_cierre       TIMESTAMPTZ,
     monto_contado      NUMERIC(12,2),                      -- efectivo contado físicamente al cerrar
     monto_esperado     NUMERIC(12,2),                       -- apertura + ventas en efectivo (calculado al cerrar)
     diferencia         NUMERIC(12,2),                       -- monto_contado - monto_esperado
     estado             VARCHAR(10) NOT NULL DEFAULT 'abierta' CHECK (estado IN ('abierta', 'cerrada')),
     notas              TEXT,
-    creado_en          TIMESTAMP NOT NULL DEFAULT NOW()
+    creado_en          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Solo puede haber una caja abierta a la vez
@@ -88,7 +90,7 @@ CREATE TABLE movimientos_caja (
     tipo           VARCHAR(10) NOT NULL CHECK (tipo IN ('ingreso', 'egreso')),
     monto          NUMERIC(12,2) NOT NULL CHECK (monto > 0),
     concepto       VARCHAR(200) NOT NULL,  -- ej: "Retiro", "Pago de luz", "Pago a proveedor"
-    creado_en      TIMESTAMP NOT NULL DEFAULT NOW()
+    creado_en      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_movimientos_caja_sesion ON movimientos_caja(caja_sesion_id);
@@ -105,9 +107,10 @@ CREATE TABLE movimientos_stock (
     motivo           VARCHAR(30) NOT NULL CHECK (motivo IN ('venta', 'ajuste_manual', 'devolucion')),
     cantidad         NUMERIC(12,2) NOT NULL,
     stock_resultante NUMERIC(12,2) NOT NULL,
+    color            VARCHAR(50),          -- si el movimiento es de un color puntual del producto
     venta_id         INTEGER,
     notas            TEXT,
-    creado_en        TIMESTAMP NOT NULL DEFAULT NOW()
+    creado_en        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_movimientos_producto ON movimientos_stock(producto_id);
@@ -118,14 +121,14 @@ CREATE INDEX idx_movimientos_fecha ON movimientos_stock(creado_en);
 -- ------------------------------------------------------------
 CREATE TABLE ventas (
     id             SERIAL PRIMARY KEY,
-    fecha          TIMESTAMP NOT NULL DEFAULT NOW(),
+    fecha          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     total          NUMERIC(12,2) NOT NULL DEFAULT 0,
     metodo_pago    VARCHAR(30) NOT NULL DEFAULT 'efectivo' CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago')),
     caja_sesion_id INTEGER REFERENCES caja_sesiones(id),  -- a qué turno de caja pertenece (si había una abierta)
     usuario_id     INTEGER REFERENCES usuarios(id),        -- qué vendedor hizo la venta
     anulada        BOOLEAN NOT NULL DEFAULT FALSE,
     notas          TEXT,
-    creado_en      TIMESTAMP NOT NULL DEFAULT NOW()
+    creado_en      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_ventas_fecha ON ventas(fecha);

@@ -27,6 +27,11 @@ export default function Usuarios() {
     }
   };
 
+  const handleTogglePermiso = async (u) => {
+    await window.api.usuarios.actualizarPermisoProducto(u.id, !u.puede_editar_productos);
+    cargar();
+  };
+
   return (
     <div>
       <h2>Vendedores</h2>
@@ -66,6 +71,7 @@ export default function Usuarios() {
             <th>Nombre</th>
             <th>Usuario</th>
             <th>Rol</th>
+            <th>Puede editar productos / stock</th>
           </tr>
         </thead>
         <tbody>
@@ -74,6 +80,15 @@ export default function Usuarios() {
               <td>{u.nombre}</td>
               <td>{u.usuario}</td>
               <td>{u.rol}</td>
+              <td>
+                {u.rol === 'admin' ? (
+                  '(siempre puede)'
+                ) : (
+                  <button onClick={() => handleTogglePermiso(u)}>
+                    {u.puede_editar_productos ? 'Sí — apagar' : 'No — encender'}
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

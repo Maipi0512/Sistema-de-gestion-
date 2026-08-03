@@ -31,7 +31,7 @@ export default function Vender({ usuarioActual }) {
           nombre: producto.nombre,
           cantidad: 1,
           colores,
-          color: colores[0] || '',
+          color: colores[0]?.color || '',
           precioUnidad: Number(producto.precio_venta),
           precioPaquete: producto.precio_paquete != null ? Number(producto.precio_paquete) : null,
           unidadesPorPaquete: producto.unidades_por_paquete != null ? Number(producto.unidades_por_paquete) : null,
@@ -137,7 +137,7 @@ export default function Vender({ usuarioActual }) {
                   <select value={it.color} onChange={(e) => cambiarColor(it.producto_id, e.target.value)}>
                     <option value="">Elegir color...</option>
                     {it.colores.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                      <option key={c.color} value={c.color}>{c.color} (stock: {c.stock})</option>
                     ))}
                   </select>
                 ) : '-'}

@@ -43,6 +43,7 @@ ipcMain.handle('auth:login', async (_e, usuario, password) => db.verificarLogin(
 
 ipcMain.handle('usuarios:crear', async (_e, datos) => db.crearUsuario(datos));
 ipcMain.handle('usuarios:listar', async () => db.listarUsuarios());
+ipcMain.handle('usuarios:actualizarPermisoProducto', async (_e, usuarioId, puedeEditar) => db.actualizarPermisoProducto(usuarioId, puedeEditar));
 
 ipcMain.handle('productos:listar', async (_e, filtro) => db.listarProductos(filtro));
 ipcMain.handle('productos:crear', async (_e, producto) => db.crearProducto(producto));
@@ -50,6 +51,7 @@ ipcMain.handle('productos:actualizar', async (_e, id, cambios) => db.actualizarP
 ipcMain.handle('productos:ajustarStock', async (_e, id, cantidad, motivo, notas) => db.ajustarStock(id, cantidad, motivo, notas));
 ipcMain.handle('productos:agregarColor', async (_e, productoId, color) => db.agregarColorProducto(productoId, color));
 ipcMain.handle('productos:eliminarColor', async (_e, productoId, color) => db.eliminarColorProducto(productoId, color));
+ipcMain.handle('productos:sumarStockColor', async (_e, productoId, color, cantidad) => db.sumarStockColor(productoId, color, cantidad));
 ipcMain.handle('productos:coloresDistintos', async () => db.listarColoresDistintos());
 
 ipcMain.handle('ventas:crear', async (_e, items, metodoPago, usuarioId) => db.crearVenta(items, metodoPago, usuarioId));

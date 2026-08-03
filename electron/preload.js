@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
   usuarios: {
     crear: (datos) => ipcRenderer.invoke('usuarios:crear', datos),
     listar: () => ipcRenderer.invoke('usuarios:listar'),
+    actualizarPermisoProducto: (usuarioId, puedeEditar) =>
+      ipcRenderer.invoke('usuarios:actualizarPermisoProducto', usuarioId, puedeEditar),
   },
   productos: {
     listar: (filtro) => ipcRenderer.invoke('productos:listar', filtro),
@@ -16,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('productos:ajustarStock', id, cantidad, motivo, notas),
     agregarColor: (productoId, color) => ipcRenderer.invoke('productos:agregarColor', productoId, color),
     eliminarColor: (productoId, color) => ipcRenderer.invoke('productos:eliminarColor', productoId, color),
+    sumarStockColor: (productoId, color, cantidad) => ipcRenderer.invoke('productos:sumarStockColor', productoId, color, cantidad),
     coloresDistintos: () => ipcRenderer.invoke('productos:coloresDistintos'),
   },
   ventas: {

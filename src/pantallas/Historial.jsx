@@ -58,7 +58,7 @@ export default function Historial() {
             <React.Fragment key={v.id}>
               <tr>
                 <td>{v.id}</td>
-                <td>{new Date(v.fecha).toLocaleString('es-AR')}</td>
+                <td>{new Date(v.fecha).toLocaleString('es-AR', { hour12: false })}</td>
                 <td>{v.vendedor_nombre || '-'}</td>
                 <td>${Number(v.total).toFixed(2)}</td>
                 <td>{v.metodo_pago}</td>
