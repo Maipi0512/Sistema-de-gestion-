@@ -118,6 +118,9 @@ export default function Vender({ usuarioActual }) {
     setPagos((prev) => prev.map((p) => (p.id === id ? { ...p, monto } : p)));
   };
 
+  // Lo que se cobra es lo que se carga en las formas de pago, no el precio de
+  // lista: se redondea (1530 → 1500) o se le hace un descuento a una alumna
+  // del taller. La venta se registra por el monto cobrado.
   const totalPagos = pagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
   const diferenciaPagos = Math.round((total - totalPagos) * 100) / 100;
 
@@ -158,14 +161,8 @@ export default function Vender({ usuarioActual }) {
       return;
     }
 
-    if (diferenciaPagos > 0) {
-      setMensaje(`Error: faltan $${diferenciaPagos.toFixed(2)} por cubrir en las formas de pago`);
-      return;
-    }
-    if (diferenciaPagos < 0) {
-      setMensaje(`Error: las formas de pago suman $${Math.abs(diferenciaPagos).toFixed(2)} de más`);
-      return;
-    }
+    // A propósito no se exige que los pagos den justo el precio de lista: la
+    // venta se registra por lo que se cobró.
 
     try {
       const items = carrito.map((it) => ({
@@ -178,7 +175,10 @@ export default function Vender({ usuarioActual }) {
       }));
       const pagosPayload = pagos.map((p) => ({ metodo_pago: p.metodo, monto: Number(p.monto) }));
       const venta = await window.api.ventas.crear(items, pagosPayload, usuarioActual?.id ?? null);
-      setMensaje(`Venta #${venta.id} registrada — Total: $${venta.total.toFixed(2)}`);
+      const aviso = diferenciaPagos > 0
+        ? ` (descuento de $${diferenciaPagos.toFixed(2)} sobre $${total.toFixed(2)})`
+        : '';
+      setMensaje(`Venta #${venta.id} registrada — Cobrado: $${venta.total.toFixed(2)}${aviso}`);
       setCarrito([]);
       setPagos([{ id: proximoPago.current++, metodo: 'efectivo', monto: '' }]);
     } catch (err) {
@@ -319,10 +319,10 @@ export default function Vender({ usuarioActual }) {
         <button type="button" onClick={agregarPago}>+ Agregar otra forma de pago</button>
 
         <p>
-          Pagado: ${totalPagos.toFixed(2)}
-          {diferenciaPagos > 0 && ` — Falta cubrir: $${diferenciaPagos.toFixed(2)}`}
-          {diferenciaPagos < 0 && ` — Sobra: $${Math.abs(diferenciaPagos).toFixed(2)}`}
-          {diferenciaPagos === 0 && ' — Cubre el total ✓'}
+          Se cobra: ${totalPagos.toFixed(2)}
+          {diferenciaPagos > 0 && ` — Descuento sobre el total: $${diferenciaPagos.toFixed(2)}`}
+          {diferenciaPagos < 0 && ` — Se cobra $${Math.abs(diferenciaPagos).toFixed(2)} más que el total`}
+          {diferenciaPagos === 0 && ' — Igual al total ✓'}
         </p>
 
         <button disabled={carrito.length === 0} onClick={confirmarVenta}>

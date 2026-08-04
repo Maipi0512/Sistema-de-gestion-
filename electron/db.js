@@ -322,7 +322,13 @@ async function listarSesionesCaja() {
 
 // pagos: [{ metodo_pago, monto }, ...]. Una venta puede pagarse dividida
 // entre varios métodos (ej. una parte en efectivo y otra por
-// transferencia); la suma de los montos tiene que cubrir el total exacto.
+// transferencia).
+//
+// El total de la venta es lo que realmente se cobró (la suma de los pagos),
+// no la suma de los precios de lista: se redondea el vuelto (1530 → 1500) o
+// se le hace un descuento a una alumna del taller y la caja tiene que cuadrar
+// con la plata que entró. Los precios de lista quedan igual en venta_detalle,
+// así se puede ver la diferencia al abrir el detalle.
 async function crearVenta(items, pagos, usuarioId = null) {
   if (!items || items.length === 0) throw new Error('La venta no tiene items');
   if (!pagos || pagos.length === 0) throw new Error('La venta no tiene forma de pago');
@@ -339,14 +345,7 @@ async function crearVenta(items, pagos, usuarioId = null) {
     const cajaRows = await client.query(`SELECT id FROM caja_sesiones WHERE estado = 'abierta' LIMIT 1`);
     const cajaSesionId = cajaRows.rows[0] ? cajaRows.rows[0].id : null;
 
-    const total = items.reduce((acc, it) => acc + it.cantidad * it.precio_unitario, 0);
-
-    // Tolerancia de un centavo por redondeos de coma flotante en el frontend.
-    if (Math.abs(totalPagos - total) > 0.01) {
-      throw new Error(
-        `Los pagos cargados ($${totalPagos.toFixed(2)}) no coinciden con el total de la venta ($${total.toFixed(2)})`
-      );
-    }
+    const total = Math.round(totalPagos * 100) / 100;
 
     const metodoPagoResumen = pagos.length === 1 ? pagos[0].metodo_pago : 'mixto';
 
@@ -492,6 +491,80 @@ async function actualizarDescripcionesVenta(ventaId, descripciones) {
   return obtenerDetalleVenta(ventaId);
 }
 
+// Anula una venta: devuelve el stock que había descontado (uno por uno,
+// respetando color si corresponde) y la marca como anulada, para que deje
+// de contar en el historial y en la caja pero sin perder el registro.
+// No se puede anular dos veces, ni una que ya esté anulada.
+async function anularVenta(ventaId, motivo) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: ventaRows } = await client.query(
+      'SELECT id, anulada FROM ventas WHERE id = $1 FOR UPDATE',
+      [ventaId]
+    );
+    if (ventaRows.length === 0) throw new Error('Venta no encontrada');
+    if (ventaRows[0].anulada) throw new Error('Esa venta ya está anulada');
+
+    const { rows: salidas } = await client.query(
+      `SELECT producto_id, cantidad, color
+         FROM movimientos_stock
+        WHERE venta_id = $1 AND tipo = 'salida' AND motivo = 'venta'
+        ORDER BY id`,
+      [ventaId]
+    );
+
+    for (const mov of salidas) {
+      let nuevoStock;
+      if (mov.color) {
+        const { rows } = await client.query(
+          'SELECT stock FROM producto_colores WHERE producto_id = $1 AND color = $2 FOR UPDATE',
+          [mov.producto_id, mov.color]
+        );
+        if (rows.length === 0) throw new Error(`Color "${mov.color}" no encontrado para el producto ${mov.producto_id}`);
+        nuevoStock = Number(rows[0].stock) + Number(mov.cantidad);
+        await client.query(
+          'UPDATE producto_colores SET stock = $1 WHERE producto_id = $2 AND color = $3',
+          [nuevoStock, mov.producto_id, mov.color]
+        );
+      } else {
+        const { rows } = await client.query(
+          'SELECT stock_actual FROM productos WHERE id = $1 FOR UPDATE',
+          [mov.producto_id]
+        );
+        if (rows.length === 0) throw new Error(`Producto ${mov.producto_id} no encontrado`);
+        nuevoStock = Number(rows[0].stock_actual) + Number(mov.cantidad);
+        await client.query('UPDATE productos SET stock_actual = $1 WHERE id = $2', [nuevoStock, mov.producto_id]);
+      }
+
+      await client.query(
+        `INSERT INTO movimientos_stock (producto_id, tipo, motivo, cantidad, stock_resultante, venta_id, color, notas)
+         VALUES ($1, 'entrada', 'devolucion', $2, $3, $4, $5, $6)`,
+        [mov.producto_id, mov.cantidad, nuevoStock, ventaId, mov.color, 'Reverso automático por anulación de venta']
+      );
+    }
+
+    const notaLimpia = motivo && motivo.trim() ? motivo.trim() : null;
+    await client.query(
+      `UPDATE ventas
+          SET anulada = TRUE,
+              notas = COALESCE(notas || ' | ', '') || COALESCE($2, 'Venta anulada')
+        WHERE id = $1`,
+      [ventaId, notaLimpia]
+    );
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  return obtenerDetalleVenta(ventaId);
+}
+
 async function stockBajo() {
   const { rows } = await pool.query('SELECT * FROM vista_stock_bajo ORDER BY nombre');
   return rows;
@@ -514,6 +587,7 @@ module.exports = {
   listarVentas,
   obtenerDetalleVenta,
   actualizarDescripcionesVenta,
+  anularVenta,
   stockBajo,
   cajaActual,
   abrirCaja,

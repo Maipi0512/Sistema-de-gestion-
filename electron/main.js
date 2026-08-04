@@ -1,9 +1,26 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const { autoUpdater } = require('electron-updater');
 const db = require('./db');
 const exportExcel = require('./export');
 
 const isDev = !app.isPackaged;
+
+// ------------------------------------------------------------
+// AUTO-ACTUALIZACIÓN
+// La app se baja sola las versiones nuevas publicadas como release en
+// GitHub, en segundo plano y sin avisar. Se instala recién cuando alguien
+// cierra el programa normalmente (no interrumpe una venta a mitad de
+// camino) y la próxima vez que se abre ya está la versión nueva.
+// No corre en modo desarrollo: ahí no hay nada empaquetado para comparar.
+// ------------------------------------------------------------
+if (!isDev) {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  // Silencioso a propósito: sin diálogos ni notificaciones. Si falla la
+  // consulta (sin internet, por ejemplo) no debe interrumpir el trabajo.
+  autoUpdater.on('error', () => {});
+}
 
 function crearVentana() {
   const ventana = new BrowserWindow({
@@ -29,6 +46,10 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) crearVentana();
   });
+
+  if (!isDev) {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -58,6 +79,7 @@ ipcMain.handle('ventas:crear', async (_e, items, pagos, usuarioId) => db.crearVe
 ipcMain.handle('ventas:listar', async (_e, filtro) => db.listarVentas(filtro));
 ipcMain.handle('ventas:detalle', async (_e, ventaId) => db.obtenerDetalleVenta(ventaId));
 ipcMain.handle('ventas:actualizarDescripciones', async (_e, ventaId, descripciones) => db.actualizarDescripcionesVenta(ventaId, descripciones));
+ipcMain.handle('ventas:anular', async (_e, ventaId, motivo) => db.anularVenta(ventaId, motivo));
 
 ipcMain.handle('caja:actual', async () => db.cajaActual());
 ipcMain.handle('caja:abrir', async (_e, montoApertura, notas) => db.abrirCaja(montoApertura, notas));

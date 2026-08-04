@@ -1,13 +1,14 @@
 {
   "name": "almacen-costura-sistema",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sistema de gestión de ventas y stock — Almacén de Costura",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
     "build": "vite build",
-    "electron:build": "vite build && electron-builder"
+    "electron:build": "vite build && electron-builder",
+    "electron:publish": "vite build && electron-builder --publish always"
   },
   "build": {
     "appId": "com.almacencostura.sistema",
@@ -22,10 +23,16 @@
     },
     "directories": {
       "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Maipi0512",
+      "repo": "Sistema-de-gestion-"
     }
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "electron-updater": "^6.8.9",
     "exceljs": "^4.4.0",
     "pg": "^8.22.0",
     "react": "^18.3.1",

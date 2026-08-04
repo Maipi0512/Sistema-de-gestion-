@@ -35,6 +35,15 @@ export default function Historial() {
   const [guardando, setGuardando] = useState(false);
   const [errorEdicion, setErrorEdicion] = useState('');
 
+  // Anulación de venta: devuelve el stock vendido y la saca del historial.
+  // `confirmandoAnulacion` guarda el id de la venta que se está por anular
+  // mientras se pide el motivo, para mostrar el panel de confirmación propio
+  // en vez de window.confirm/prompt (Electron no implementa window.prompt).
+  const [confirmandoAnulacion, setConfirmandoAnulacion] = useState(false);
+  const [motivoAnulacion, setMotivoAnulacion] = useState('');
+  const [anulando, setAnulando] = useState(false);
+  const [errorAnulacion, setErrorAnulacion] = useState('');
+
   const cargar = () => {
     window.api.ventas.listar({ desde: desde || null, hasta: hasta || null }).then(setVentas);
   };
@@ -49,8 +58,32 @@ export default function Historial() {
     setErrorEdicion('');
   };
 
+  const salirDeAnulacion = () => {
+    setConfirmandoAnulacion(false);
+    setMotivoAnulacion('');
+    setErrorAnulacion('');
+  };
+
+  // Devuelve el stock que había descontado la venta y la marca como anulada.
+  const confirmarAnulacion = async (venta) => {
+    setErrorAnulacion('');
+    setAnulando(true);
+    try {
+      await window.api.ventas.anular(venta.id, motivoAnulacion);
+      setDetalleAbierto(null);
+      salirDeEdicion();
+      salirDeAnulacion();
+      cargar();
+    } catch (err) {
+      setErrorAnulacion(err.message);
+    } finally {
+      setAnulando(false);
+    }
+  };
+
   const verDetalle = async (venta) => {
     salirDeEdicion();
+    salirDeAnulacion();
     if (detalleAbierto?.id === venta.id) {
       setDetalleAbierto(null);
       return;
@@ -153,10 +186,49 @@ export default function Historial() {
                       ) : (
                         <button onClick={empezarEdicion}>Editar descripciones</button>
                       )}
+                      {!confirmandoAnulacion && (
+                        <button onClick={() => setConfirmandoAnulacion(true)}>Anular venta</button>
+                      )}
                     </div>
                     {errorEdicion && <p className="error">Error: {errorEdicion}</p>}
 
+                    {confirmandoAnulacion && (
+                      <div className="barra-acciones">
+                        <p>
+                          ¿Anular la venta #{detalleAbierto.id} por ${Number(detalleAbierto.total).toFixed(2)}?
+                          Se devuelve el stock vendido.
+                        </p>
+                        <label>
+                          Motivo (opcional)
+                          <input
+                            type="text"
+                            style={{ width: 260 }}
+                            value={motivoAnulacion}
+                            onChange={(e) => setMotivoAnulacion(e.target.value)}
+                          />
+                        </label>
+                        <button onClick={() => confirmarAnulacion(detalleAbierto)} disabled={anulando}>
+                          {anulando ? 'Anulando...' : 'Confirmar anulación'}
+                        </button>
+                        <button onClick={salirDeAnulacion} disabled={anulando}>Cancelar</button>
+                        {errorAnulacion && <p className="error">Error: {errorAnulacion}</p>}
+                      </div>
+                    )}
+
                     <p><strong>Forma de pago:</strong> {formatearPagos(detalleAbierto)}</p>
+                    {(() => {
+                      // La venta se guarda por lo cobrado; si se redondeó o se
+                      // hizo un descuento no coincide con la suma de los items.
+                      const lista = detalleAbierto.items.reduce((acc, it) => acc + Number(it.subtotal), 0);
+                      const dif = Math.round((lista - Number(detalleAbierto.total)) * 100) / 100;
+                      if (dif === 0) return null;
+                      return (
+                        <p>
+                          <strong>Precio de lista:</strong> ${lista.toFixed(2)} —{' '}
+                          {dif > 0 ? `descuento de $${dif.toFixed(2)}` : `recargo de $${Math.abs(dif).toFixed(2)}`}
+                        </p>
+                      );
+                    })()}
 
                     <table className="tabla">
                       <thead>
