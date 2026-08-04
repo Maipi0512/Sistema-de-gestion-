@@ -32,7 +32,8 @@ export default function Vender({ usuarioActual }) {
           cantidad: 1,
           colores,
           color: colores[0]?.color || '',
-          precioUnidad: Number(producto.precio_venta),
+          precioVariable: !!producto.precio_variable,
+          precioUnidad: producto.precio_variable ? '' : Number(producto.precio_venta),
           precioPaquete: producto.precio_paquete != null ? Number(producto.precio_paquete) : null,
           unidadesPorPaquete: producto.unidades_por_paquete != null ? Number(producto.unidades_por_paquete) : null,
           modo: 'unidad',
@@ -62,11 +63,15 @@ export default function Vender({ usuarioActual }) {
     actualizarItem(producto_id, { color });
   };
 
+  const cambiarPrecioUnidad = (producto_id, precioUnidad) => {
+    actualizarItem(producto_id, { precioUnidad: precioUnidad === '' ? '' : Number(precioUnidad) });
+  };
+
   const quitarDelCarrito = (producto_id) => {
     setCarrito((prev) => prev.filter((it) => it.producto_id !== producto_id));
   };
 
-  const precioEfectivo = (it) => (it.modo === 'paquete' ? it.precioPaquete : it.precioUnidad);
+  const precioEfectivo = (it) => (it.modo === 'paquete' ? it.precioPaquete : Number(it.precioUnidad) || 0);
 
   const total = carrito.reduce((acc, it) => acc + it.cantidad * precioEfectivo(it), 0);
 
@@ -76,6 +81,12 @@ export default function Vender({ usuarioActual }) {
     const sinColor = carrito.find((it) => it.colores.length > 0 && !it.color);
     if (sinColor) {
       setMensaje(`Error: elegí un color para "${sinColor.nombre}"`);
+      return;
+    }
+
+    const sinPrecio = carrito.find((it) => it.precioVariable && !(Number(it.precioUnidad) > 0));
+    if (sinPrecio) {
+      setMensaje(`Error: cargá el precio de "${sinPrecio.nombre}"`);
       return;
     }
 
@@ -110,7 +121,8 @@ export default function Vender({ usuarioActual }) {
         <ul className="lista-resultados">
           {resultados.map((p) => (
             <li key={p.id} onClick={() => agregarAlCarrito(p)}>
-              {p.nombre} — ${Number(p.precio_venta).toFixed(2)} (stock: {p.stock_actual})
+              {p.nombre} — {p.precio_variable ? 'precio a cargar' : `$${Number(p.precio_venta).toFixed(2)}`}
+              {!p.precio_variable && ` (stock: ${p.stock_actual})`}
             </li>
           ))}
         </ul>
@@ -159,7 +171,21 @@ export default function Vender({ usuarioActual }) {
                   onChange={(e) => cambiarCantidad(it.producto_id, e.target.value)}
                 />
               </td>
-              <td>${precioEfectivo(it).toFixed(2)}</td>
+              <td>
+                {it.precioVariable && it.modo !== 'paquete' ? (
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="Cargar precio"
+                    style={{ width: 100 }}
+                    value={it.precioUnidad}
+                    onChange={(e) => cambiarPrecioUnidad(it.producto_id, e.target.value)}
+                  />
+                ) : (
+                  `$${precioEfectivo(it).toFixed(2)}`
+                )}
+              </td>
               <td>${(it.cantidad * precioEfectivo(it)).toFixed(2)}</td>
               <td>
                 <button onClick={() => quitarDelCarrito(it.producto_id)}>Quitar</button>

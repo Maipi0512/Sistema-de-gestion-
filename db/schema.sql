@@ -33,6 +33,7 @@ CREATE TABLE productos (
     categoria              VARCHAR(50),
     precio_costo           NUMERIC(12,2) NOT NULL DEFAULT 0,
     precio_venta           NUMERIC(12,2) NOT NULL,
+    precio_variable        BOOLEAN NOT NULL DEFAULT FALSE,      -- si TRUE, el precio se carga al vender (ej. arreglos, talleres)
     precio_paquete         NUMERIC(12,2),                       -- precio si se vende por paquete (opcional)
     unidades_por_paquete   NUMERIC(12,2),                       -- cuántas unidades trae ese paquete
     unidad_medida          VARCHAR(20) NOT NULL DEFAULT 'unidad', -- 'unidad', 'metro', 'rollo', 'paquete'

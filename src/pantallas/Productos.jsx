@@ -9,6 +9,7 @@ const PRODUCTO_VACIO = {
   categoria: '',
   precio_costo: '',
   precio_venta: '',
+  precio_variable: false,
   precio_paquete: '',
   unidades_por_paquete: '',
   unidad_medida: 'unidad',
@@ -52,6 +53,10 @@ export default function Productos({ usuarioActual }) {
     setForm({ ...form, [campo]: e.target.value });
   };
 
+  const handleCambioCheckbox = (campo) => (e) => {
+    setForm({ ...form, [campo]: e.target.checked });
+  };
+
   const cancelarForm = () => {
     setForm(PRODUCTO_VACIO);
     setColoresForm([]);
@@ -78,6 +83,7 @@ export default function Productos({ usuarioActual }) {
       categoria: producto.categoria || '',
       precio_costo: producto.precio_costo ?? '',
       precio_venta: producto.precio_venta ?? '',
+      precio_variable: !!producto.precio_variable,
       precio_paquete: producto.precio_paquete ?? '',
       unidades_por_paquete: producto.unidades_por_paquete ?? '',
       unidad_medida: producto.unidad_medida || 'unidad',
@@ -149,7 +155,8 @@ export default function Productos({ usuarioActual }) {
         descripcion: form.descripcion || null,
         categoria: form.categoria || null,
         precio_costo: parseFloat(form.precio_costo) || 0,
-        precio_venta: parseFloat(form.precio_venta),
+        precio_venta: form.precio_variable ? 0 : parseFloat(form.precio_venta),
+        precio_variable: !!form.precio_variable,
         precio_paquete: form.precio_paquete ? parseFloat(form.precio_paquete) : null,
         unidades_por_paquete: form.unidades_por_paquete ? parseFloat(form.unidades_por_paquete) : null,
         unidad_medida: form.unidad_medida,
@@ -229,11 +236,17 @@ export default function Productos({ usuarioActual }) {
               Precio costo
               <input type="number" step="0.01" value={form.precio_costo} onChange={handleCambio('precio_costo')} />
             </label>
-            <label>
-              Precio venta (por unidad) *
-              <input required type="number" step="0.01" value={form.precio_venta} onChange={handleCambio('precio_venta')} />
-            </label>
+            {!form.precio_variable && (
+              <label>
+                Precio venta (por unidad) *
+                <input required type="number" step="0.01" value={form.precio_venta} onChange={handleCambio('precio_venta')} />
+              </label>
+            )}
           </div>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={form.precio_variable} onChange={handleCambioCheckbox('precio_variable')} />
+            Precio variable (se carga al momento de vender, ej. arreglos, talleres)
+          </label>
           <div className="fila-form">
             <label>
               Precio por paquete (opcional)
@@ -348,7 +361,7 @@ export default function Productos({ usuarioActual }) {
                   ? p.colores.map((c) => `${c.color} (${c.stock})`).join(', ')
                   : '-'}
               </td>
-              <td>${Number(p.precio_venta).toFixed(2)}</td>
+              <td>{p.precio_variable ? 'Precio variable' : `$${Number(p.precio_venta).toFixed(2)}`}</td>
               <td className={Number(p.stock_minimo) > 0 && Number(p.stock_actual) <= Number(p.stock_minimo) ? 'stock-bajo' : ''}>
                 {p.colores && p.colores.length > 0 ? (
                   <>

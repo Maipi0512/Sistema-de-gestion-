@@ -108,16 +108,16 @@ async function listarProductos(filtro = '') {
 
 async function crearProducto(producto) {
   const {
-    codigo, nombre, descripcion, categoria, precio_costo, precio_venta,
+    codigo, nombre, descripcion, categoria, precio_costo, precio_venta, precio_variable,
     precio_paquete, unidades_por_paquete, unidad_medida, stock_inicial, stock_minimo,
   } = producto;
   const { rows } = await pool.query(
-    `INSERT INTO productos (codigo, nombre, descripcion, categoria, precio_costo, precio_venta, precio_paquete, unidades_por_paquete, unidad_medida, stock_actual, stock_minimo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO productos (codigo, nombre, descripcion, categoria, precio_costo, precio_venta, precio_variable, precio_paquete, unidades_por_paquete, unidad_medida, stock_actual, stock_minimo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       codigo || null, nombre, descripcion || null, categoria || null,
-      precio_costo || 0, precio_venta, precio_paquete || null, unidades_por_paquete || null,
+      precio_costo || 0, precio_venta || 0, !!precio_variable, precio_paquete || null, unidades_por_paquete || null,
       unidad_medida || 'unidad', stock_inicial || 0, stock_minimo || 0,
     ]
   );
