@@ -146,6 +146,7 @@ button:disabled { background: #ccc; cursor: not-allowed; }
 
 .total { font-size: 20px; font-weight: bold; }
 .error { color: #c0392b; }
+.nota { color: #7f8c8d; font-size: 13px; }
 
 .chips {
   display: flex;

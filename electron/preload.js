@@ -22,9 +22,11 @@ contextBridge.exposeInMainWorld('api', {
     coloresDistintos: () => ipcRenderer.invoke('productos:coloresDistintos'),
   },
   ventas: {
-    crear: (items, metodoPago, usuarioId) => ipcRenderer.invoke('ventas:crear', items, metodoPago, usuarioId),
+    crear: (items, pagos, usuarioId) => ipcRenderer.invoke('ventas:crear', items, pagos, usuarioId),
     listar: (filtro) => ipcRenderer.invoke('ventas:listar', filtro),
     detalle: (ventaId) => ipcRenderer.invoke('ventas:detalle', ventaId),
+    actualizarDescripciones: (ventaId, descripciones) =>
+      ipcRenderer.invoke('ventas:actualizarDescripciones', ventaId, descripciones),
   },
   caja: {
     actual: () => ipcRenderer.invoke('caja:actual'),

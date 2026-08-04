@@ -106,22 +106,24 @@ export default function Caja() {
 
             {resumen && (
               <>
-                <table className="tabla">
-                  <thead>
-                    <tr><th>Método de pago</th><th>Cantidad de ventas</th><th>Total</th></tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(resumen.porMetodo).map(([metodo, datos]) => (
-                      <tr key={metodo}><td>{metodo}</td><td>{datos.cantidad}</td><td>${datos.total.toFixed(2)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p><strong>Total vendido: ${resumen.totalGeneral.toFixed(2)}</strong></p>
+                {/* La caja es plata física: acá solo entra lo cobrado en efectivo.
+                    Transferencias, débito, crédito y Mercado Pago no pasan por
+                    el cajón, así que se ven en el Historial de ventas, no acá. */}
+                <p>
+                  Ventas en efectivo: ${resumen.totalEfectivo.toFixed(2)}
+                  {' '}({resumen.porMetodo.efectivo ? resumen.porMetodo.efectivo.cantidad : 0} ventas)
+                </p>
                 <p>Ingresos manuales: ${resumen.totalIngresos.toFixed(2)} — Egresos manuales (retiros, pagos): ${resumen.totalEgresos.toFixed(2)}</p>
                 <p>
-                  Efectivo esperado en caja: $
-                  {(Number(caja.monto_apertura) + resumen.totalEfectivo + resumen.totalIngresos - resumen.totalEgresos).toFixed(2)}
+                  <strong>
+                    Efectivo esperado en caja: $
+                    {(Number(caja.monto_apertura) + resumen.totalEfectivo + resumen.totalIngresos - resumen.totalEgresos).toFixed(2)}
+                  </strong>
                   {' '}(apertura + ventas en efectivo + ingresos − egresos)
+                </p>
+                <p className="nota">
+                  Lo cobrado por transferencia, débito, crédito o Mercado Pago no se
+                  cuenta acá porque no queda plata en el cajón. Está en el Historial de ventas.
                 </p>
               </>
             )}

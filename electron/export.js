@@ -2,6 +2,26 @@ const ExcelJS = require('exceljs');
 const { dialog } = require('electron');
 const db = require('./db');
 
+const ETIQUETA_METODO = {
+  efectivo: 'Efectivo',
+  debito: 'Débito',
+  credito: 'Crédito',
+  transferencia: 'Transferencia',
+  mercado_pago: 'Mercado Pago',
+  mixto: 'Mixto',
+};
+
+// "Efectivo $500 + Transferencia $200" si la venta se dividió entre
+// varios métodos; si no, la etiqueta simple del método único.
+function formatearPagos(venta) {
+  if (!venta.pagos || venta.pagos.length <= 1) {
+    return ETIQUETA_METODO[venta.metodo_pago] || venta.metodo_pago;
+  }
+  return venta.pagos
+    .map((p) => `${ETIQUETA_METODO[p.metodo_pago] || p.metodo_pago} $${Number(p.monto).toFixed(2)}`)
+    .join(' + ');
+}
+
 async function exportarVentasExcel(filtro = {}) {
   const ventas = await db.listarVentas(filtro);
 
@@ -12,8 +32,9 @@ async function exportarVentasExcel(filtro = {}) {
     { header: 'ID', key: 'id', width: 8 },
     { header: 'Fecha', key: 'fecha', width: 20 },
     { header: 'Vendedor', key: 'vendedor', width: 20 },
+    { header: 'Descripción', key: 'descripciones', width: 35 },
     { header: 'Total', key: 'total', width: 14 },
-    { header: 'Método de pago', key: 'metodo_pago', width: 18 },
+    { header: 'Método de pago', key: 'metodo_pago', width: 30 },
   ];
   hoja.getRow(1).font = { bold: true };
 
@@ -22,8 +43,9 @@ async function exportarVentasExcel(filtro = {}) {
       id: v.id,
       fecha: new Date(v.fecha).toLocaleString('es-AR'),
       vendedor: v.vendedor_nombre || '-',
+      descripciones: v.descripciones || '',
       total: Number(v.total),
-      metodo_pago: v.metodo_pago,
+      metodo_pago: formatearPagos(v),
     });
   });
 

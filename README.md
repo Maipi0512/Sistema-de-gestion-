@@ -9,7 +9,8 @@ de internet.
 ```
 almacen-costura-sistema/
 ├── db/
-│   └── schema.sql          # Esquema de la base de datos
+│   ├── schema.sql          # Esquema de la base de datos
+│   └── migracion-01-*.sql  # Cambios a aplicar sobre una base ya creada
 ├── electron/
 │   ├── main.js              # Proceso principal (ventana + IPC)
 │   ├── preload.js           # Puente seguro hacia React
@@ -48,6 +49,16 @@ CREATE DATABASE almacen_costura;
 ```
 
 (Ajustá la ruta del `\i` a donde hayas guardado el proyecto)
+
+**Si la base ya estaba creada de antes**, no hay que volver a correr
+`schema.sql` (borraría todo). En su lugar, correr las migraciones que
+falten, una sola vez cada una:
+
+```sql
+\c almacen_costura
+\i 'C:/ruta/completa/al/proyecto/db/migracion-01-descripcion-venta.sql'
+\i 'C:/ruta/completa/al/proyecto/db/migracion-02-multipago.sql'
+```
 
 ### 3. Instalar dependencias del proyecto
 
@@ -119,12 +130,25 @@ El instalador queda en la carpeta `release/`.
 - **Login por vendedor**: cada persona que vende tiene su propio
   usuario y contraseña. Las ventas quedan asociadas a quién las hizo.
 - **Productos**: alta, listado, búsqueda, alerta de stock bajo.
-- **Vender**: punto de venta, descuenta stock automáticamente.
+- **Vender**: punto de venta, descuenta stock automáticamente. Cada
+  producto de la venta puede llevar una **descripción** para anotar de
+  quién es (ej. "arreglo de Marta", "taller de tejido — Ana"). En los
+  arreglos y pagos de taller (productos con precio variable) la
+  descripción es obligatoria, para que no quede ninguno sin dueño.
+  Una venta se puede **pagar con más de un método a la vez** (ej. una
+  parte en efectivo y otra por transferencia); la pantalla no deja
+  confirmar si lo cargado en las formas de pago no cubre exactamente
+  el total.
 - **Historial de ventas**: todas las ventas con fecha, vendedor,
-  total y detalle de productos vendidos.
-- **Caja**: apertura con monto inicial, resumen de ventas por
-  método de pago durante el turno, cierre con conteo físico y
-  cálculo automático de diferencia (sobrante/faltante).
+  descripción, total y detalle de productos vendidos. Desde el detalle
+  se pueden **editar las descripciones** de una venta ya registrada,
+  por si en el momento se olvidaron de anotar de quién era. Editar la
+  descripción no toca montos, stock ni método de pago.
+- **Caja**: apertura con monto inicial, cierre con conteo físico y
+  cálculo automático de diferencia (sobrante/faltante). La caja muestra
+  **solo lo cobrado en efectivo**, porque es lo único que queda
+  físicamente en el cajón; transferencias, débito, crédito y Mercado
+  Pago se consultan en el Historial de ventas.
 - **Exportar a Excel**: tanto el listado de productos como el
   historial de ventas (respetando el filtro de fechas que hayas
   aplicado) se pueden exportar a un `.xlsx` con un botón.

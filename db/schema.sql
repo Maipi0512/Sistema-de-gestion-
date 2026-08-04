@@ -124,7 +124,10 @@ CREATE TABLE ventas (
     id             SERIAL PRIMARY KEY,
     fecha          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     total          NUMERIC(12,2) NOT NULL DEFAULT 0,
-    metodo_pago    VARCHAR(30) NOT NULL DEFAULT 'efectivo' CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago')),
+    -- Resumen del/de los pago(s): el método único si se pagó con uno solo,
+    -- o 'mixto' si se dividió entre varios. El detalle real de cuánto se
+    -- pagó con cada método vive en venta_pagos.
+    metodo_pago    VARCHAR(30) NOT NULL DEFAULT 'efectivo' CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago', 'mixto')),
     caja_sesion_id INTEGER REFERENCES caja_sesiones(id),  -- a qué turno de caja pertenece (si había una abierta)
     usuario_id     INTEGER REFERENCES usuarios(id),        -- qué vendedor hizo la venta
     anulada        BOOLEAN NOT NULL DEFAULT FALSE,
@@ -134,6 +137,21 @@ CREATE TABLE ventas (
 
 CREATE INDEX idx_ventas_fecha ON ventas(fecha);
 CREATE INDEX idx_ventas_caja ON ventas(caja_sesion_id);
+
+-- ------------------------------------------------------------
+-- PAGOS DE VENTA
+-- Una venta puede pagarse con más de un método a la vez (ej. una
+-- parte en efectivo y otra por transferencia). La suma de montos
+-- de una venta siempre debe ser igual a ventas.total.
+-- ------------------------------------------------------------
+CREATE TABLE venta_pagos (
+    id          SERIAL PRIMARY KEY,
+    venta_id    INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+    metodo_pago VARCHAR(30) NOT NULL CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago')),
+    monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0)
+);
+
+CREATE INDEX idx_venta_pagos_venta ON venta_pagos(venta_id);
 
 -- ------------------------------------------------------------
 -- DETALLE DE VENTA
@@ -146,7 +164,8 @@ CREATE TABLE venta_detalle (
     precio_unitario       NUMERIC(12,2) NOT NULL,
     subtotal              NUMERIC(12,2) NOT NULL,
     color                 VARCHAR(50),          -- color elegido, si el producto tiene colores
-    unidades_por_paquete  NUMERIC(12,2)         -- si se vendió por paquete, cuántas unidades traía
+    unidades_por_paquete  NUMERIC(12,2),        -- si se vendió por paquete, cuántas unidades traía
+    descripcion           TEXT                  -- de quién es el arreglo / a nombre de quién es el pago del taller
 );
 
 CREATE INDEX idx_venta_detalle_venta ON venta_detalle(venta_id);

@@ -54,9 +54,10 @@ ipcMain.handle('productos:eliminarColor', async (_e, productoId, color) => db.el
 ipcMain.handle('productos:sumarStockColor', async (_e, productoId, color, cantidad) => db.sumarStockColor(productoId, color, cantidad));
 ipcMain.handle('productos:coloresDistintos', async () => db.listarColoresDistintos());
 
-ipcMain.handle('ventas:crear', async (_e, items, metodoPago, usuarioId) => db.crearVenta(items, metodoPago, usuarioId));
+ipcMain.handle('ventas:crear', async (_e, items, pagos, usuarioId) => db.crearVenta(items, pagos, usuarioId));
 ipcMain.handle('ventas:listar', async (_e, filtro) => db.listarVentas(filtro));
 ipcMain.handle('ventas:detalle', async (_e, ventaId) => db.obtenerDetalleVenta(ventaId));
+ipcMain.handle('ventas:actualizarDescripciones', async (_e, ventaId, descripciones) => db.actualizarDescripcionesVenta(ventaId, descripciones));
 
 ipcMain.handle('caja:actual', async () => db.cajaActual());
 ipcMain.handle('caja:abrir', async (_e, montoApertura, notas) => db.abrirCaja(montoApertura, notas));

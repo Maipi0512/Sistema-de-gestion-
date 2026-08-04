@@ -226,17 +226,21 @@ async function abrirCaja(montoApertura, notas = '') {
 
 // Devuelve el total vendido por método de pago, más los movimientos
 // manuales (retiros, pagos de servicios, ingresos extra) de la sesión.
+// Se suma desde venta_pagos (no desde ventas.metodo_pago) para que una
+// venta dividida entre efectivo y transferencia cuente cada parte en
+// el método que corresponde, en vez de caer entera en uno solo.
 async function resumenCaja(sesionId) {
-  const { rows: ventasRows } = await pool.query(
-    `SELECT metodo_pago, COALESCE(SUM(total), 0) AS total, COUNT(*) AS cantidad
-     FROM ventas
-     WHERE caja_sesion_id = $1 AND anulada = FALSE
-     GROUP BY metodo_pago`,
+  const { rows: pagosRows } = await pool.query(
+    `SELECT vp.metodo_pago, COALESCE(SUM(vp.monto), 0) AS total, COUNT(DISTINCT vp.venta_id) AS cantidad
+     FROM venta_pagos vp
+     JOIN ventas v ON v.id = vp.venta_id
+     WHERE v.caja_sesion_id = $1 AND v.anulada = FALSE
+     GROUP BY vp.metodo_pago`,
     [sesionId]
   );
   const porMetodo = {};
   let totalGeneral = 0;
-  for (const row of ventasRows) {
+  for (const row of pagosRows) {
     porMetodo[row.metodo_pago] = { total: Number(row.total), cantidad: Number(row.cantidad) };
     totalGeneral += Number(row.total);
   }
@@ -316,8 +320,17 @@ async function listarSesionesCaja() {
 // Se asocian automáticamente a la caja abierta, si hay una.
 // ------------------------------------------------------------
 
-async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
+// pagos: [{ metodo_pago, monto }, ...]. Una venta puede pagarse dividida
+// entre varios métodos (ej. una parte en efectivo y otra por
+// transferencia); la suma de los montos tiene que cubrir el total exacto.
+async function crearVenta(items, pagos, usuarioId = null) {
   if (!items || items.length === 0) throw new Error('La venta no tiene items');
+  if (!pagos || pagos.length === 0) throw new Error('La venta no tiene forma de pago');
+
+  const totalPagos = pagos.reduce((acc, p) => acc + Number(p.monto || 0), 0);
+  if (pagos.some((p) => !(Number(p.monto) > 0))) {
+    throw new Error('Cada forma de pago tiene que tener un monto mayor a cero');
+  }
 
   const client = await pool.connect();
   try {
@@ -328,14 +341,30 @@ async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
 
     const total = items.reduce((acc, it) => acc + it.cantidad * it.precio_unitario, 0);
 
+    // Tolerancia de un centavo por redondeos de coma flotante en el frontend.
+    if (Math.abs(totalPagos - total) > 0.01) {
+      throw new Error(
+        `Los pagos cargados ($${totalPagos.toFixed(2)}) no coinciden con el total de la venta ($${total.toFixed(2)})`
+      );
+    }
+
+    const metodoPagoResumen = pagos.length === 1 ? pagos[0].metodo_pago : 'mixto';
+
     const { rows: ventaRows } = await client.query(
       `INSERT INTO ventas (total, metodo_pago, caja_sesion_id, usuario_id) VALUES ($1, $2, $3, $4) RETURNING id, fecha`,
-      [total, metodoPago, cajaSesionId, usuarioId]
+      [total, metodoPagoResumen, cajaSesionId, usuarioId]
     );
     const ventaId = ventaRows[0].id;
 
+    for (const pago of pagos) {
+      await client.query(
+        `INSERT INTO venta_pagos (venta_id, metodo_pago, monto) VALUES ($1, $2, $3)`,
+        [ventaId, pago.metodo_pago, Number(pago.monto)]
+      );
+    }
+
     for (const item of items) {
-      const { producto_id, cantidad, precio_unitario, color, unidades_por_paquete } = item;
+      const { producto_id, cantidad, precio_unitario, color, unidades_por_paquete, descripcion } = item;
       const cantidadStock = cantidad * (unidades_por_paquete || 1);
       let nuevoStock;
 
@@ -357,10 +386,12 @@ async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
         await client.query('UPDATE productos SET stock_actual = $1 WHERE id = $2', [nuevoStock, producto_id]);
       }
 
+      const descripcionLimpia = descripcion && descripcion.trim() ? descripcion.trim() : null;
+
       await client.query(
-        `INSERT INTO venta_detalle (venta_id, producto_id, cantidad, precio_unitario, subtotal, color, unidades_por_paquete)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [ventaId, producto_id, cantidad, precio_unitario, cantidad * precio_unitario, color || null, unidades_por_paquete || null]
+        `INSERT INTO venta_detalle (venta_id, producto_id, cantidad, precio_unitario, subtotal, color, unidades_por_paquete, descripcion)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [ventaId, producto_id, cantidad, precio_unitario, cantidad * precio_unitario, color || null, unidades_por_paquete || null, descripcionLimpia]
       );
 
       await client.query(
@@ -381,10 +412,22 @@ async function crearVenta(items, metodoPago = 'efectivo', usuarioId = null) {
 }
 
 // Historial de ventas, con filtro opcional de fechas.
+// `descripciones` junta en un solo texto las anotaciones de los items
+// (de quién es el arreglo, a nombre de quién es el taller) para poder
+// mostrarlas en la lista sin abrir el detalle de cada venta.
+// `pagos` trae el desglose por método (útil cuando metodo_pago = 'mixto').
 async function listarVentas(filtro = {}) {
   const { desde, hasta } = filtro;
   const { rows } = await pool.query(
-    `SELECT v.*, u.nombre AS vendedor_nombre
+    `SELECT v.*, u.nombre AS vendedor_nombre,
+       (SELECT string_agg(vd.descripcion, ' | ' ORDER BY vd.id)
+          FROM venta_detalle vd
+         WHERE vd.venta_id = v.id AND NULLIF(TRIM(vd.descripcion), '') IS NOT NULL
+       ) AS descripciones,
+       (SELECT json_agg(json_build_object('metodo_pago', vp.metodo_pago, 'monto', vp.monto) ORDER BY vp.id)
+          FROM venta_pagos vp
+         WHERE vp.venta_id = v.id
+       ) AS pagos
      FROM ventas v
      LEFT JOIN usuarios u ON u.id = v.usuario_id
      WHERE v.anulada = FALSE
@@ -397,7 +440,8 @@ async function listarVentas(filtro = {}) {
   return rows;
 }
 
-// Detalle completo de una venta puntual, con nombre de producto.
+// Detalle completo de una venta puntual, con nombre de producto y el
+// desglose de pagos (uno o varios métodos, según cómo se haya cobrado).
 async function obtenerDetalleVenta(ventaId) {
   const { rows: venta } = await pool.query('SELECT * FROM ventas WHERE id = $1', [ventaId]);
   if (venta.length === 0) throw new Error('Venta no encontrada');
@@ -409,7 +453,43 @@ async function obtenerDetalleVenta(ventaId) {
      WHERE vd.venta_id = $1`,
     [ventaId]
   );
-  return { ...venta[0], items };
+
+  const { rows: pagos } = await pool.query(
+    `SELECT id, metodo_pago, monto FROM venta_pagos WHERE venta_id = $1 ORDER BY id`,
+    [ventaId]
+  );
+
+  return { ...venta[0], items, pagos };
+}
+
+// Corrige las descripciones de una venta ya registrada, para cuando se
+// olvidaron de anotar de quién era el arreglo o el pago del taller.
+// Solo toca el texto: no cambia montos, ni stock, ni método de pago.
+async function actualizarDescripcionesVenta(ventaId, descripciones) {
+  if (!Array.isArray(descripciones) || descripciones.length === 0) {
+    throw new Error('No hay descripciones para actualizar');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const { id, descripcion } of descripciones) {
+      const limpia = descripcion && descripcion.trim() ? descripcion.trim() : null;
+      // El filtro por venta_id evita editar el detalle de otra venta.
+      await client.query(
+        `UPDATE venta_detalle SET descripcion = $1 WHERE id = $2 AND venta_id = $3`,
+        [limpia, id, ventaId]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  return obtenerDetalleVenta(ventaId);
 }
 
 async function stockBajo() {
@@ -433,6 +513,7 @@ module.exports = {
   crearVenta,
   listarVentas,
   obtenerDetalleVenta,
+  actualizarDescripcionesVenta,
   stockBajo,
   cajaActual,
   abrirCaja,

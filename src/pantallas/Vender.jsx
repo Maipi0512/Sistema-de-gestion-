@@ -1,11 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
+const METODOS_PAGO = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'debito', label: 'Débito' },
+  { value: 'credito', label: 'Crédito' },
+  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'mercado_pago', label: 'Mercado Pago' },
+];
 
 export default function Vender({ usuarioActual }) {
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState([]);
   const [carrito, setCarrito] = useState([]);
-  const [metodoPago, setMetodoPago] = useState('efectivo');
+  // Una venta puede pagarse con más de un método (ej. una parte en
+  // efectivo y otra por transferencia). Cada renglón es {id, metodo, monto}.
+  const [pagos, setPagos] = useState([{ id: 1, metodo: 'efectivo', monto: '' }]);
   const [mensaje, setMensaje] = useState('');
+
+  // Cada renglón del carrito lleva su propio número de línea. No alcanza
+  // con el producto_id: dos arreglos del mismo tipo pueden ser de personas
+  // distintas y cada uno necesita su precio y su descripción aparte.
+  const proximaLinea = useRef(1);
+  const proximoPago = useRef(2);
 
   useEffect(() => {
     if (busqueda.trim() === '') {
@@ -16,23 +32,30 @@ export default function Vender({ usuarioActual }) {
   }, [busqueda]);
 
   const agregarAlCarrito = (producto) => {
+    const nuevaLinea = proximaLinea.current++;
     setCarrito((prev) => {
-      const existente = prev.find((it) => it.producto_id === producto.id);
-      if (existente) {
-        return prev.map((it) =>
-          it.producto_id === producto.id ? { ...it, cantidad: it.cantidad + 1 } : it
-        );
+      // Los productos comunes se agrupan sumando cantidad, como siempre.
+      // Los arreglos y talleres (precio variable) no: van uno por renglón.
+      if (!producto.precio_variable) {
+        const existente = prev.find((it) => it.producto_id === producto.id);
+        if (existente) {
+          return prev.map((it) =>
+            it.linea === existente.linea ? { ...it, cantidad: it.cantidad + 1 } : it
+          );
+        }
       }
       const colores = producto.colores || [];
       return [
         ...prev,
         {
+          linea: nuevaLinea,
           producto_id: producto.id,
           nombre: producto.nombre,
           cantidad: 1,
           colores,
           color: colores[0]?.color || '',
           precioVariable: !!producto.precio_variable,
+          descripcion: '',
           precioUnidad: producto.precio_variable ? '' : Number(producto.precio_venta),
           precioPaquete: producto.precio_paquete != null ? Number(producto.precio_paquete) : null,
           unidadesPorPaquete: producto.unidades_por_paquete != null ? Number(producto.unidades_por_paquete) : null,
@@ -45,35 +68,66 @@ export default function Vender({ usuarioActual }) {
     setResultados([]);
   };
 
-  const actualizarItem = (producto_id, cambios) => {
+  const actualizarItem = (linea, cambios) => {
     setCarrito((prev) =>
-      prev.map((it) => (it.producto_id === producto_id ? { ...it, ...cambios } : it))
+      prev.map((it) => (it.linea === linea ? { ...it, ...cambios } : it))
     );
   };
 
-  const cambiarCantidad = (producto_id, cantidad) => {
-    actualizarItem(producto_id, { cantidad: Number(cantidad) });
+  const cambiarCantidad = (linea, cantidad) => {
+    actualizarItem(linea, { cantidad: Number(cantidad) });
   };
 
-  const cambiarModo = (producto_id, modo) => {
-    actualizarItem(producto_id, { modo });
+  const cambiarModo = (linea, modo) => {
+    actualizarItem(linea, { modo });
   };
 
-  const cambiarColor = (producto_id, color) => {
-    actualizarItem(producto_id, { color });
+  const cambiarColor = (linea, color) => {
+    actualizarItem(linea, { color });
   };
 
-  const cambiarPrecioUnidad = (producto_id, precioUnidad) => {
-    actualizarItem(producto_id, { precioUnidad: precioUnidad === '' ? '' : Number(precioUnidad) });
+  const cambiarPrecioUnidad = (linea, precioUnidad) => {
+    actualizarItem(linea, { precioUnidad: precioUnidad === '' ? '' : Number(precioUnidad) });
   };
 
-  const quitarDelCarrito = (producto_id) => {
-    setCarrito((prev) => prev.filter((it) => it.producto_id !== producto_id));
+  const cambiarDescripcion = (linea, descripcion) => {
+    actualizarItem(linea, { descripcion });
+  };
+
+  const quitarDelCarrito = (linea) => {
+    setCarrito((prev) => prev.filter((it) => it.linea !== linea));
   };
 
   const precioEfectivo = (it) => (it.modo === 'paquete' ? it.precioPaquete : Number(it.precioUnidad) || 0);
 
   const total = carrito.reduce((acc, it) => acc + it.cantidad * precioEfectivo(it), 0);
+
+  const agregarPago = () => {
+    setPagos((prev) => [...prev, { id: proximoPago.current++, metodo: 'efectivo', monto: '' }]);
+  };
+
+  const quitarPago = (id) => {
+    setPagos((prev) => (prev.length > 1 ? prev.filter((p) => p.id !== id) : prev));
+  };
+
+  const cambiarMetodoPago = (id, metodo) => {
+    setPagos((prev) => prev.map((p) => (p.id === id ? { ...p, metodo } : p)));
+  };
+
+  const cambiarMontoPago = (id, monto) => {
+    setPagos((prev) => prev.map((p) => (p.id === id ? { ...p, monto } : p)));
+  };
+
+  const totalPagos = pagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+  const diferenciaPagos = Math.round((total - totalPagos) * 100) / 100;
+
+  // Completa este renglón con lo que todavía falta cubrir del total,
+  // para no tener que sacar la cuenta a mano cuando se reparte el pago.
+  const completarConRestante = (id) => {
+    const otros = pagos.filter((p) => p.id !== id).reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+    const restante = Math.max(0, Math.round((total - otros) * 100) / 100);
+    cambiarMontoPago(id, restante);
+  };
 
   const confirmarVenta = async () => {
     setMensaje('');
@@ -90,6 +144,29 @@ export default function Vender({ usuarioActual }) {
       return;
     }
 
+    // Los arreglos y los pagos de taller (precio variable) tienen que quedar
+    // siempre a nombre de alguien, si no después no se sabe de quién eran.
+    const sinDescripcion = carrito.find((it) => it.precioVariable && !it.descripcion.trim());
+    if (sinDescripcion) {
+      setMensaje(`Error: escribí de quién es "${sinDescripcion.nombre}" en la columna Descripción`);
+      return;
+    }
+
+    const pagoSinMonto = pagos.find((p) => !(Number(p.monto) > 0));
+    if (pagoSinMonto) {
+      setMensaje('Error: cargá un monto mayor a cero en cada forma de pago');
+      return;
+    }
+
+    if (diferenciaPagos > 0) {
+      setMensaje(`Error: faltan $${diferenciaPagos.toFixed(2)} por cubrir en las formas de pago`);
+      return;
+    }
+    if (diferenciaPagos < 0) {
+      setMensaje(`Error: las formas de pago suman $${Math.abs(diferenciaPagos).toFixed(2)} de más`);
+      return;
+    }
+
     try {
       const items = carrito.map((it) => ({
         producto_id: it.producto_id,
@@ -97,10 +174,13 @@ export default function Vender({ usuarioActual }) {
         precio_unitario: precioEfectivo(it),
         color: it.colores.length > 0 ? it.color : null,
         unidades_por_paquete: it.modo === 'paquete' ? it.unidadesPorPaquete : null,
+        descripcion: it.descripcion,
       }));
-      const venta = await window.api.ventas.crear(items, metodoPago, usuarioActual?.id ?? null);
+      const pagosPayload = pagos.map((p) => ({ metodo_pago: p.metodo, monto: Number(p.monto) }));
+      const venta = await window.api.ventas.crear(items, pagosPayload, usuarioActual?.id ?? null);
       setMensaje(`Venta #${venta.id} registrada — Total: $${venta.total.toFixed(2)}`);
       setCarrito([]);
+      setPagos([{ id: proximoPago.current++, metodo: 'efectivo', monto: '' }]);
     } catch (err) {
       setMensaje(`Error: ${err.message}`);
     }
@@ -136,17 +216,18 @@ export default function Vender({ usuarioActual }) {
             <th>Unidad/Paquete</th>
             <th>Cantidad</th>
             <th>Precio unit.</th>
+            <th>Descripción</th>
             <th>Subtotal</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {carrito.map((it) => (
-            <tr key={it.producto_id}>
+            <tr key={it.linea}>
               <td>{it.nombre}</td>
               <td>
                 {it.colores.length > 0 ? (
-                  <select value={it.color} onChange={(e) => cambiarColor(it.producto_id, e.target.value)}>
+                  <select value={it.color} onChange={(e) => cambiarColor(it.linea, e.target.value)}>
                     <option value="">Elegir color...</option>
                     {it.colores.map((c) => (
                       <option key={c.color} value={c.color}>{c.color} (stock: {c.stock})</option>
@@ -156,7 +237,7 @@ export default function Vender({ usuarioActual }) {
               </td>
               <td>
                 {it.precioPaquete ? (
-                  <select value={it.modo} onChange={(e) => cambiarModo(it.producto_id, e.target.value)}>
+                  <select value={it.modo} onChange={(e) => cambiarModo(it.linea, e.target.value)}>
                     <option value="unidad">Unidad</option>
                     <option value="paquete">Paquete (x{it.unidadesPorPaquete})</option>
                   </select>
@@ -168,7 +249,7 @@ export default function Vender({ usuarioActual }) {
                   min="0.01"
                   step="0.01"
                   value={it.cantidad}
-                  onChange={(e) => cambiarCantidad(it.producto_id, e.target.value)}
+                  onChange={(e) => cambiarCantidad(it.linea, e.target.value)}
                 />
               </td>
               <td>
@@ -180,15 +261,24 @@ export default function Vender({ usuarioActual }) {
                     placeholder="Cargar precio"
                     style={{ width: 100 }}
                     value={it.precioUnidad}
-                    onChange={(e) => cambiarPrecioUnidad(it.producto_id, e.target.value)}
+                    onChange={(e) => cambiarPrecioUnidad(it.linea, e.target.value)}
                   />
                 ) : (
                   `$${precioEfectivo(it).toFixed(2)}`
                 )}
               </td>
+              <td>
+                <input
+                  type="text"
+                  style={{ width: 180 }}
+                  placeholder={it.precioVariable ? '¿De quién es?' : 'Opcional'}
+                  value={it.descripcion}
+                  onChange={(e) => cambiarDescripcion(it.linea, e.target.value)}
+                />
+              </td>
               <td>${(it.cantidad * precioEfectivo(it)).toFixed(2)}</td>
               <td>
-                <button onClick={() => quitarDelCarrito(it.producto_id)}>Quitar</button>
+                <button onClick={() => quitarDelCarrito(it.linea)}>Quitar</button>
               </td>
             </tr>
           ))}
@@ -197,16 +287,44 @@ export default function Vender({ usuarioActual }) {
 
       <div className="tarjeta">
         <p className="total">Total: ${total.toFixed(2)}</p>
-        <label>
-          Método de pago
-          <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
-            <option value="efectivo">Efectivo</option>
-            <option value="debito">Débito</option>
-            <option value="credito">Crédito</option>
-            <option value="transferencia">Transferencia</option>
-            <option value="mercado_pago">Mercado Pago</option>
-          </select>
-        </label>
+
+        <h3>Forma de pago</h3>
+        {pagos.map((p) => (
+          <div className="fila-form" key={p.id}>
+            <label>
+              Método
+              <select value={p.metodo} onChange={(e) => cambiarMetodoPago(p.id, e.target.value)}>
+                {METODOS_PAGO.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Monto
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                style={{ width: 120 }}
+                value={p.monto}
+                onChange={(e) => cambiarMontoPago(p.id, e.target.value)}
+              />
+            </label>
+            <button type="button" onClick={() => completarConRestante(p.id)}>Completar con el resto</button>
+            {pagos.length > 1 && (
+              <button type="button" onClick={() => quitarPago(p.id)}>Quitar</button>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={agregarPago}>+ Agregar otra forma de pago</button>
+
+        <p>
+          Pagado: ${totalPagos.toFixed(2)}
+          {diferenciaPagos > 0 && ` — Falta cubrir: $${diferenciaPagos.toFixed(2)}`}
+          {diferenciaPagos < 0 && ` — Sobra: $${Math.abs(diferenciaPagos).toFixed(2)}`}
+          {diferenciaPagos === 0 && ' — Cubre el total ✓'}
+        </p>
+
         <button disabled={carrito.length === 0} onClick={confirmarVenta}>
           Confirmar venta
         </button>
