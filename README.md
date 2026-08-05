@@ -141,6 +141,28 @@ Requiere internet para chequear/bajar la actualización; si no hay
 internet, falla en silencio y la app sigue funcionando con la versión
 que ya tenía instalada.
 
+### `git commit`/`push` vs. `electron:publish` — cuál usar
+
+Son dos cosas distintas y hay que hacer las dos, en este orden, cada
+vez que se cambia código de la app:
+
+| Comando | Qué hace | Actualiza las PCs del local? |
+|---|---|---|
+| `git commit` / `git push` | Guarda el cambio en el historial del repositorio (backup, referencia) | No |
+| `npm run electron:publish` | Compila, arma el `.exe` y sube un Release nuevo a GitHub | Sí — es lo único que `electron-updater` chequea |
+
+Flujo completo para un cambio en `electron/` o `src/`:
+
+1. Hacer el cambio en el código.
+2. `git add .` → `git commit -m "..."` → `git push` (queda guardado
+   en el repositorio).
+3. Subir el número de versión en [package.json](package.json)
+   (ej. `1.0.1` → `1.0.2`).
+4. `npm run electron:publish` (esto sí llega a las PCs del local).
+
+Si el cambio es solo en documentación (como este README), alcanza
+con el paso 2 — no hace falta tocar la versión ni publicar.
+
 ### Primera vez: generar el token de GitHub
 
 Hace falta un token para poder publicar releases desde la terminal:
