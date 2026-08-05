@@ -7,9 +7,13 @@ const { app } = require('electron');
 // ------------------------------------------------------------
 // CONFIGURACIÓN DE CONEXIÓN
 // Se guarda en un config.json en la carpeta de datos de usuario,
-// así cada PC puede apuntar a una IP distinta sin tocar código:
-//  - La PC "servidor" usa host: "localhost"
-//  - La PC "cliente" usa host: "192.168.1.X" (la IP del servidor)
+// así cada PC puede apuntar a la misma base sin tocar código:
+//  - Base local en red: host "localhost" (PC servidor) o la IP de
+//    esa PC (192.168.1.X) desde la PC cliente.
+//  - Base cloud (Supabase, Render, Neon, etc.): host es el que te
+//    da el proveedor (ej. "db.xxxx.supabase.co"). Estas requieren
+//    SSL, que se activa solo automáticamente más abajo cuando el
+//    host no es local.
 // ------------------------------------------------------------
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 
@@ -28,7 +32,18 @@ function cargarConfig() {
   return config;
 }
 
-const pool = new Pool(cargarConfig());
+function esHostLocal(host) {
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
+const config = cargarConfig();
+const pool = new Pool({
+  ...config,
+  // Supabase y la mayoría de los proveedores cloud exigen SSL.
+  // rejectUnauthorized: false porque son certificados intermedios
+  // que Node no siempre valida bien; la conexión sigue yendo cifrada.
+  ssl: esHostLocal(config.host) ? false : { rejectUnauthorized: false },
+});
 
 // ------------------------------------------------------------
 // USUARIOS / LOGIN
