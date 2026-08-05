@@ -157,7 +157,8 @@ Flujo completo para un cambio en `electron/` o `src/`:
 2. `git add .` → `git commit -m "..."` → `git push` (queda guardado
    en el repositorio).
 3. Subir el número de versión en [package.json](package.json)
-   (ej. `1.0.1` → `1.0.2`).
+   (ej. `1.0.1` → `1.0.2`), a mano o con `npm version patch`
+   (ver detalle en "Publicar un cambio nuevo" más abajo).
 4. `npm run electron:publish` (esto sí llega a las PCs del local).
 
 Si el cambio es solo en documentación (como este README), alcanza
@@ -195,7 +196,16 @@ npm run electron:publish
 Antes de correrlo, **subí el número de versión** en
 [package.json](package.json) (ej. `1.0.1` → `1.0.2`) — sin eso,
 `electron-updater` no detecta que hay algo nuevo, porque compara
-versiones.
+versiones. Se puede editar el archivo a mano, o con un comando:
+
+```powershell
+npm version patch
+```
+
+Sube el último número (`1.0.2` → `1.0.3`). Ojo: este comando además
+**hace un commit y un tag de git automáticamente** con ese cambio,
+así que conviene no tener otros cambios sin commitear antes de
+correrlo (si los hay, va a fallar).
 
 Esto compila, arma el instalador y lo sube como Release nuevo a
 GitHub (`https://github.com/Maipi0512/Sistema-de-gestion-/releases`),
