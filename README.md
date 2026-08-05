@@ -123,7 +123,86 @@ Cuando esté lista para usar en el local:
 npm run electron:build
 ```
 
-El instalador queda en la carpeta `release/`.
+El instalador queda en la carpeta `release/`. Este comando arma el
+`.exe` **local**, sin publicarlo a ningún lado — sirve para probar.
+Para la instalación real en el local, mejor usar el flujo de
+auto-actualización de abajo.
+
+## Auto-actualización (instalar una vez, actualizar sin reinstalar)
+
+La app usa `electron-updater` (ver [electron/main.js](electron/main.js)):
+cada vez que arranca, revisa si hay una versión más nueva publicada
+como Release en GitHub, la descarga sola en segundo plano (sin avisar,
+sin interrumpir una venta) y la instala la próxima vez que alguien
+cierra el programa normalmente. Por eso el instalador se pone **una
+sola vez** en cada PC del local — de ahí en más se actualizan solas.
+
+Requiere internet para chequear/bajar la actualización; si no hay
+internet, falla en silencio y la app sigue funcionando con la versión
+que ya tenía instalada.
+
+### Primera vez: generar el token de GitHub
+
+Hace falta un token para poder publicar releases desde la terminal:
+
+1. Ir a https://github.com/settings/tokens?type=beta →
+   **Generate new token**.
+2. **Repository access** → **Only select repositories** →
+   `Sistema-de-gestion-`.
+3. **Permissions** → **Repository permissions** → **Contents** →
+   **Read and write**.
+4. **Generate token** y copiarlo (empieza con `github_pat_...`).
+   GitHub lo muestra **una sola vez**.
+
+**Nunca pegues el token en un chat, commit, ni archivo del repo** —
+quien lo tenga puede publicar código a tu nombre. Si en algún momento
+se expone, revocalo en la misma pantalla (`Delete`) y generá uno
+nuevo.
+
+### Publicar un cambio nuevo
+
+Cada vez que modifiques el código y quieras que llegue a las PCs del
+local, en PowerShell:
+
+```powershell
+cd almacen-costura-sistema
+$env:GH_TOKEN = "tu_token"
+npm run electron:publish
+```
+
+Antes de correrlo, **subí el número de versión** en
+[package.json](package.json) (ej. `1.0.1` → `1.0.2`) — sin eso,
+`electron-updater` no detecta que hay algo nuevo, porque compara
+versiones.
+
+Esto compila, arma el instalador y lo sube como Release nuevo a
+GitHub (`https://github.com/Maipi0512/Sistema-de-gestion-/releases`),
+junto con el `latest.yml` que usan las apps ya instaladas para
+comparar versiones.
+
+### Problemas comunes al publicar (Windows)
+
+**"la ejecución de scripts está deshabilitada en este sistema"**
+al correr `npm install` o `npm run ...`: es una política de
+PowerShell. Se soluciona una sola vez, por usuario:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+**"Cannot create symbolic link"** al correr `electron:publish`
+(falla bajando `winCodeSign`): Windows no deja crear symlinks sin
+permisos de administrador. Activar el **Modo de desarrollador** una
+sola vez: `Configuración → Privacidad y seguridad → Para
+desarrolladores → Modo de desarrollador → activar`. Después, cerrar y
+volver a abrir PowerShell.
+
+### Instalar por primera vez en una PC del local
+
+Bajar el `.exe` del último Release en GitHub (o usar el que queda en
+`release/` al publicar) y correrlo una vez en cada PC. De ahí en más,
+esa PC se actualiza sola cada vez que se publique una versión nueva —
+no hace falta volver a instalar a mano.
 
 ## Funcionalidades
 
