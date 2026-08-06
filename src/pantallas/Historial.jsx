@@ -21,7 +21,8 @@ const formatearPagos = (venta) => {
     .join(' + ');
 };
 
-export default function Historial() {
+export default function Historial({ usuarioActual }) {
+  const esAdmin = usuarioActual?.rol === 'admin';
   const [ventas, setVentas] = useState([]);
   const [detalleAbierto, setDetalleAbierto] = useState(null); // venta con items, o null
   const [desde, setDesde] = useState('');
@@ -69,7 +70,7 @@ export default function Historial() {
     setErrorAnulacion('');
     setAnulando(true);
     try {
-      await window.api.ventas.anular(venta.id, motivoAnulacion);
+      await window.api.ventas.anular(venta.id, motivoAnulacion, usuarioActual?.id);
       setDetalleAbierto(null);
       salirDeEdicion();
       salirDeAnulacion();
@@ -186,13 +187,18 @@ export default function Historial() {
                       ) : (
                         <button onClick={empezarEdicion}>Editar descripciones</button>
                       )}
-                      {!confirmandoAnulacion && (
+                      {esAdmin && !confirmandoAnulacion && (
                         <button onClick={() => setConfirmandoAnulacion(true)}>Anular venta</button>
                       )}
                     </div>
                     {errorEdicion && <p className="error">Error: {errorEdicion}</p>}
+                    {!esAdmin && (
+                      <p style={{ fontSize: 13, opacity: 0.75 }}>
+                        Solo un administrador puede anular una venta.
+                      </p>
+                    )}
 
-                    {confirmandoAnulacion && (
+                    {esAdmin && confirmandoAnulacion && (
                       <div className="barra-acciones">
                         <p>
                           ¿Anular la venta #{detalleAbierto.id} por ${Number(detalleAbierto.total).toFixed(2)}?

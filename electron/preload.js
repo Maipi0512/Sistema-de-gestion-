@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('api', {
     detalle: (ventaId) => ipcRenderer.invoke('ventas:detalle', ventaId),
     actualizarDescripciones: (ventaId, descripciones) =>
       ipcRenderer.invoke('ventas:actualizarDescripciones', ventaId, descripciones),
-    anular: (ventaId, motivo) => ipcRenderer.invoke('ventas:anular', ventaId, motivo),
+    anular: (ventaId, motivo, usuarioId) => ipcRenderer.invoke('ventas:anular', ventaId, motivo, usuarioId),
   },
   caja: {
     actual: () => ipcRenderer.invoke('caja:actual'),

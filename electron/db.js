@@ -510,7 +510,14 @@ async function actualizarDescripcionesVenta(ventaId, descripciones) {
 // respetando color si corresponde) y la marca como anulada, para que deje
 // de contar en el historial y en la caja pero sin perder el registro.
 // No se puede anular dos veces, ni una que ya esté anulada.
-async function anularVenta(ventaId, motivo) {
+// Solo un administrador puede anular — se valida acá además de ocultar
+// el botón en la pantalla, para que no se pueda forzar por fuera de la UI.
+async function anularVenta(ventaId, motivo, usuarioId) {
+  const { rows: usuarioRows } = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [usuarioId]);
+  if (usuarioRows.length === 0 || usuarioRows[0].rol !== 'admin') {
+    throw new Error('Solo un administrador puede anular una venta');
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

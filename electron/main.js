@@ -79,7 +79,7 @@ ipcMain.handle('ventas:crear', async (_e, items, pagos, usuarioId) => db.crearVe
 ipcMain.handle('ventas:listar', async (_e, filtro) => db.listarVentas(filtro));
 ipcMain.handle('ventas:detalle', async (_e, ventaId) => db.obtenerDetalleVenta(ventaId));
 ipcMain.handle('ventas:actualizarDescripciones', async (_e, ventaId, descripciones) => db.actualizarDescripcionesVenta(ventaId, descripciones));
-ipcMain.handle('ventas:anular', async (_e, ventaId, motivo) => db.anularVenta(ventaId, motivo));
+ipcMain.handle('ventas:anular', async (_e, ventaId, motivo, usuarioId) => db.anularVenta(ventaId, motivo, usuarioId));
 
 ipcMain.handle('caja:actual', async () => db.cajaActual());
 ipcMain.handle('caja:abrir', async (_e, montoApertura, notas) => db.abrirCaja(montoApertura, notas));
