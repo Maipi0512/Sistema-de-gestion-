@@ -245,3 +245,25 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_productos_actualizado
 BEFORE UPDATE ON productos
 FOR EACH ROW EXECUTE FUNCTION actualizar_timestamp();
+
+-- ------------------------------------------------------------
+-- SEGURIDAD: Row-Level Security
+-- Si esta base vive en Supabase (u otro proveedor que exponga una
+-- API REST automática sobre el esquema "public"), hay que activar
+-- RLS en cada tabla para que no quede accesible desde afuera de la
+-- app. No se agregan políticas: esta app se conecta como el usuario
+-- dueño de las tablas (ver config.json), que siempre bypasea RLS, así
+-- que esto no le cambia nada a la app — solo bloquea el acceso por
+-- la API REST, que no se usa.
+-- ------------------------------------------------------------
+ALTER TABLE usuarios                     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE productos                    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE producto_colores             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE caja_sesiones                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE movimientos_caja             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE movimientos_stock            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ventas                       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE venta_pagos                  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE venta_detalle                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clientes                     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cuenta_corriente_movimientos ENABLE ROW LEVEL SECURITY;
