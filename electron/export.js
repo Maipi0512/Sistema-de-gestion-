@@ -24,7 +24,10 @@ function formatearPagos(venta) {
 }
 
 async function exportarVentasExcel(filtro = {}) {
-  const ventas = await db.listarVentas(filtro);
+  const [ventas, itemsVendidos] = await Promise.all([
+    db.listarVentas(filtro),
+    db.listarDetalleVentas(filtro),
+  ]);
 
   const workbook = new ExcelJS.Workbook();
   const hoja = workbook.addWorksheet('Ventas');
@@ -56,6 +59,40 @@ async function exportarVentasExcel(filtro = {}) {
   hoja.addRow({});
   const filaTotal = hoja.addRow({ vendedor: 'TOTAL', total: totalGeneral });
   filaTotal.font = { bold: true };
+
+  // Segunda hoja: un renglón por producto vendido (no por venta), para ver
+  // el detalle de qué se vendió y no solo el total de cada venta.
+  const hojaDetalle = workbook.addWorksheet('Detalle de ventas');
+  hojaDetalle.columns = [
+    { header: 'Venta #', key: 'venta_id', width: 10 },
+    { header: 'Fecha', key: 'fecha', width: 20 },
+    { header: 'Vendedor', key: 'vendedor', width: 20 },
+    { header: 'Cliente', key: 'cliente', width: 20 },
+    { header: 'Producto', key: 'producto', width: 30 },
+    { header: 'Color', key: 'color', width: 14 },
+    { header: 'Cantidad', key: 'cantidad', width: 12 },
+    { header: 'Precio unit.', key: 'precio_unitario', width: 14 },
+    { header: 'Subtotal', key: 'subtotal', width: 14 },
+    { header: 'Descripción', key: 'descripcion', width: 30 },
+  ];
+  hojaDetalle.getRow(1).font = { bold: true };
+
+  itemsVendidos.forEach((it) => {
+    hojaDetalle.addRow({
+      venta_id: it.venta_id,
+      fecha: new Date(it.fecha).toLocaleString('es-AR'),
+      vendedor: it.vendedor_nombre || '-',
+      cliente: it.cliente_nombre || '-',
+      producto: it.producto_nombre,
+      color: it.color || '-',
+      cantidad: it.unidades_por_paquete
+        ? `${Number(it.cantidad)} paquete(s) x ${Number(it.unidades_por_paquete)}`
+        : Number(it.cantidad),
+      precio_unitario: Number(it.precio_unitario),
+      subtotal: Number(it.subtotal),
+      descripcion: it.descripcion || '',
+    });
+  });
 
   const { filePath, canceled } = await dialog.showSaveDialog({
     title: 'Guardar informe de ventas',

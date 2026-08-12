@@ -469,6 +469,29 @@ async function listarVentas(filtro = {}) {
   return rows;
 }
 
+// Detalle línea por línea (un renglón por producto vendido) de todas las
+// ventas que caen dentro del filtro de fechas. Se usa para el Excel de
+// ventas, que además del resumen por venta necesita ver qué se vendió.
+async function listarDetalleVentas(filtro = {}) {
+  const { desde, hasta } = filtro;
+  const { rows } = await pool.query(
+    `SELECT v.id AS venta_id, v.fecha, u.nombre AS vendedor_nombre, c.nombre AS cliente_nombre,
+       p.nombre AS producto_nombre, vd.color, vd.cantidad, vd.unidades_por_paquete,
+       vd.precio_unitario, vd.subtotal, vd.descripcion
+     FROM venta_detalle vd
+     JOIN ventas v ON v.id = vd.venta_id
+     JOIN productos p ON p.id = vd.producto_id
+     LEFT JOIN usuarios u ON u.id = v.usuario_id
+     LEFT JOIN clientes c ON c.id = v.cliente_id
+     WHERE v.anulada = FALSE
+       AND ($1::timestamp IS NULL OR v.fecha >= $1)
+       AND ($2::timestamp IS NULL OR v.fecha <= $2)
+     ORDER BY v.fecha DESC, v.id, vd.id`,
+    [desde || null, hasta || null]
+  );
+  return rows;
+}
+
 // Detalle completo de una venta puntual, con nombre de producto y el
 // desglose de pagos (uno o varios métodos, según cómo se haya cobrado).
 async function obtenerDetalleVenta(ventaId) {
@@ -737,6 +760,7 @@ module.exports = {
   listarColoresDistintos,
   crearVenta,
   listarVentas,
+  listarDetalleVentas,
   obtenerDetalleVenta,
   actualizarDescripcionesVenta,
   anularVenta,

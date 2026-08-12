@@ -279,7 +279,10 @@ no hace falta volver a instalar a mano.
   es plata física hasta que el cliente pague).
 - **Exportar a Excel**: tanto el listado de productos como el
   historial de ventas (respetando el filtro de fechas que hayas
-  aplicado) se pueden exportar a un `.xlsx` con un botón.
+  aplicado) se pueden exportar a un `.xlsx` con un botón. El de ventas
+  trae dos hojas: "Ventas" (una fila por venta, con el total) y
+  "Detalle de ventas" (una fila por producto vendido, con cantidad,
+  precio unitario y subtotal — para ver qué se vendió, no solo cuánto).
 - **Vendedores** (solo admin): alta de nuevos usuarios.
 
 ## Nota sobre acceso desde una segunda PC
