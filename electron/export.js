@@ -9,6 +9,7 @@ const ETIQUETA_METODO = {
   transferencia: 'Transferencia',
   mercado_pago: 'Mercado Pago',
   mixto: 'Mixto',
+  cuenta_corriente: 'Cuenta corriente',
 };
 
 // "Efectivo $500 + Transferencia $200" si la venta se dividió entre
@@ -32,6 +33,7 @@ async function exportarVentasExcel(filtro = {}) {
     { header: 'ID', key: 'id', width: 8 },
     { header: 'Fecha', key: 'fecha', width: 20 },
     { header: 'Vendedor', key: 'vendedor', width: 20 },
+    { header: 'Cliente', key: 'cliente', width: 20 },
     { header: 'Descripción', key: 'descripciones', width: 35 },
     { header: 'Total', key: 'total', width: 14 },
     { header: 'Método de pago', key: 'metodo_pago', width: 30 },
@@ -43,6 +45,7 @@ async function exportarVentasExcel(filtro = {}) {
       id: v.id,
       fecha: new Date(v.fecha).toLocaleString('es-AR'),
       vendedor: v.vendedor_nombre || '-',
+      cliente: v.cliente_nombre || '-',
       descripciones: v.descripciones || '',
       total: Number(v.total),
       metodo_pago: formatearPagos(v),

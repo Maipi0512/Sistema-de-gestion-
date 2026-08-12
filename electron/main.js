@@ -75,11 +75,19 @@ ipcMain.handle('productos:eliminarColor', async (_e, productoId, color) => db.el
 ipcMain.handle('productos:sumarStockColor', async (_e, productoId, color, cantidad) => db.sumarStockColor(productoId, color, cantidad));
 ipcMain.handle('productos:coloresDistintos', async () => db.listarColoresDistintos());
 
-ipcMain.handle('ventas:crear', async (_e, items, pagos, usuarioId) => db.crearVenta(items, pagos, usuarioId));
+ipcMain.handle('ventas:crear', async (_e, items, pagos, usuarioId, clienteId) => db.crearVenta(items, pagos, usuarioId, clienteId));
 ipcMain.handle('ventas:listar', async (_e, filtro) => db.listarVentas(filtro));
 ipcMain.handle('ventas:detalle', async (_e, ventaId) => db.obtenerDetalleVenta(ventaId));
 ipcMain.handle('ventas:actualizarDescripciones', async (_e, ventaId, descripciones) => db.actualizarDescripcionesVenta(ventaId, descripciones));
 ipcMain.handle('ventas:anular', async (_e, ventaId, motivo, usuarioId) => db.anularVenta(ventaId, motivo, usuarioId));
+
+ipcMain.handle('clientes:listar', async (_e, filtro) => db.listarClientes(filtro));
+ipcMain.handle('clientes:crear', async (_e, datos) => db.crearCliente(datos));
+ipcMain.handle('clientes:actualizar', async (_e, id, cambios) => db.actualizarCliente(id, cambios));
+ipcMain.handle('clientes:obtener', async (_e, id) => db.obtenerCliente(id));
+ipcMain.handle('clientes:listarMovimientos', async (_e, clienteId) => db.listarMovimientosCliente(clienteId));
+ipcMain.handle('clientes:registrarPago', async (_e, clienteId, monto, metodoPago, notas, usuarioId) =>
+  db.registrarPagoCuentaCorriente(clienteId, monto, metodoPago, notas, usuarioId));
 
 ipcMain.handle('caja:actual', async () => db.cajaActual());
 ipcMain.handle('caja:abrir', async (_e, montoApertura, notas) => db.abrirCaja(montoApertura, notas));

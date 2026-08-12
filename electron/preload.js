@@ -22,12 +22,21 @@ contextBridge.exposeInMainWorld('api', {
     coloresDistintos: () => ipcRenderer.invoke('productos:coloresDistintos'),
   },
   ventas: {
-    crear: (items, pagos, usuarioId) => ipcRenderer.invoke('ventas:crear', items, pagos, usuarioId),
+    crear: (items, pagos, usuarioId, clienteId) => ipcRenderer.invoke('ventas:crear', items, pagos, usuarioId, clienteId),
     listar: (filtro) => ipcRenderer.invoke('ventas:listar', filtro),
     detalle: (ventaId) => ipcRenderer.invoke('ventas:detalle', ventaId),
     actualizarDescripciones: (ventaId, descripciones) =>
       ipcRenderer.invoke('ventas:actualizarDescripciones', ventaId, descripciones),
     anular: (ventaId, motivo, usuarioId) => ipcRenderer.invoke('ventas:anular', ventaId, motivo, usuarioId),
+  },
+  clientes: {
+    listar: (filtro) => ipcRenderer.invoke('clientes:listar', filtro),
+    crear: (datos) => ipcRenderer.invoke('clientes:crear', datos),
+    actualizar: (id, cambios) => ipcRenderer.invoke('clientes:actualizar', id, cambios),
+    obtener: (id) => ipcRenderer.invoke('clientes:obtener', id),
+    listarMovimientos: (clienteId) => ipcRenderer.invoke('clientes:listarMovimientos', clienteId),
+    registrarPago: (clienteId, monto, metodoPago, notas, usuarioId) =>
+      ipcRenderer.invoke('clientes:registrarPago', clienteId, monto, metodoPago, notas, usuarioId),
   },
   caja: {
     actual: () => ipcRenderer.invoke('caja:actual'),

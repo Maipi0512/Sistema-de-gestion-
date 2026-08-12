@@ -118,6 +118,21 @@ CREATE INDEX idx_movimientos_producto ON movimientos_stock(producto_id);
 CREATE INDEX idx_movimientos_fecha ON movimientos_stock(creado_en);
 
 -- ------------------------------------------------------------
+-- CLIENTES
+-- Registro básico para poder llevarles cuenta corriente (fiado).
+-- ------------------------------------------------------------
+CREATE TABLE clientes (
+    id          SERIAL PRIMARY KEY,
+    nombre      VARCHAR(150) NOT NULL,
+    telefono    VARCHAR(50),
+    notas       TEXT,
+    activo      BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_clientes_nombre ON clientes USING gin (to_tsvector('spanish', nombre));
+
+-- ------------------------------------------------------------
 -- VENTAS (cabecera) — historial completo de ventas realizadas
 -- ------------------------------------------------------------
 CREATE TABLE ventas (
@@ -127,9 +142,10 @@ CREATE TABLE ventas (
     -- Resumen del/de los pago(s): el método único si se pagó con uno solo,
     -- o 'mixto' si se dividió entre varios. El detalle real de cuánto se
     -- pagó con cada método vive en venta_pagos.
-    metodo_pago    VARCHAR(30) NOT NULL DEFAULT 'efectivo' CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago', 'mixto')),
+    metodo_pago    VARCHAR(30) NOT NULL DEFAULT 'efectivo' CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago', 'mixto', 'cuenta_corriente')),
     caja_sesion_id INTEGER REFERENCES caja_sesiones(id),  -- a qué turno de caja pertenece (si había una abierta)
     usuario_id     INTEGER REFERENCES usuarios(id),        -- qué vendedor hizo la venta
+    cliente_id     INTEGER REFERENCES clientes(id),        -- a qué cliente pertenece, si se vendió a cuenta corriente
     anulada        BOOLEAN NOT NULL DEFAULT FALSE,
     notas          TEXT,
     creado_en      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -147,11 +163,44 @@ CREATE INDEX idx_ventas_caja ON ventas(caja_sesion_id);
 CREATE TABLE venta_pagos (
     id          SERIAL PRIMARY KEY,
     venta_id    INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
-    metodo_pago VARCHAR(30) NOT NULL CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago')),
+    metodo_pago VARCHAR(30) NOT NULL CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago', 'cuenta_corriente')),
     monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0)
 );
 
 CREATE INDEX idx_venta_pagos_venta ON venta_pagos(venta_id);
+
+-- ------------------------------------------------------------
+-- CUENTA CORRIENTE DE CLIENTES
+-- Cada fila es UN cargo (venta a cuenta) o UN pago (abono). El saldo
+-- de un cliente es la suma de sus cargos menos la suma de sus pagos;
+-- no se guarda como columna aparte para no tener que mantenerlo
+-- sincronizado a mano.
+-- ------------------------------------------------------------
+CREATE TABLE cuenta_corriente_movimientos (
+    id          SERIAL PRIMARY KEY,
+    cliente_id  INTEGER NOT NULL REFERENCES clientes(id),
+    tipo        VARCHAR(10) NOT NULL CHECK (tipo IN ('cargo', 'pago')),
+    monto       NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+    -- Con qué se cobró el abono (solo aplica a tipo = 'pago'). Si fue en
+    -- efectivo y había una caja abierta, ese abono también se refleja
+    -- como ingreso en movimientos_caja para que cuadre el cajón.
+    metodo_pago VARCHAR(30) CHECK (metodo_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago')),
+    venta_id    INTEGER REFERENCES ventas(id),   -- si el cargo vino de una venta hecha a cuenta
+    usuario_id  INTEGER REFERENCES usuarios(id), -- quién registró el movimiento
+    notas       TEXT,
+    creado_en   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_cc_movimientos_cliente ON cuenta_corriente_movimientos(cliente_id);
+
+-- Saldo actual por cliente, para el listado de Clientes sin tener que
+-- sumar los movimientos a mano desde el renderer.
+CREATE VIEW vista_saldo_clientes AS
+SELECT c.id, c.nombre, c.telefono, c.notas, c.activo,
+       COALESCE(SUM(CASE WHEN m.tipo = 'cargo' THEN m.monto WHEN m.tipo = 'pago' THEN -m.monto ELSE 0 END), 0) AS saldo
+FROM clientes c
+LEFT JOIN cuenta_corriente_movimientos m ON m.cliente_id = c.id
+GROUP BY c.id, c.nombre, c.telefono, c.notas, c.activo;
 
 -- ------------------------------------------------------------
 -- DETALLE DE VENTA

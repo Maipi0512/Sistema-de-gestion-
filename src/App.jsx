@@ -6,6 +6,7 @@ import Vender from './pantallas/Vender.jsx';
 import Historial from './pantallas/Historial.jsx';
 import Caja from './pantallas/Caja.jsx';
 import Usuarios from './pantallas/Usuarios.jsx';
+import Clientes from './pantallas/Clientes.jsx';
 
 export default function App() {
   const [usuarioActual, setUsuarioActual] = useState(null);
@@ -19,6 +20,7 @@ export default function App() {
     vender: { label: 'Vender', componente: <Vender usuarioActual={usuarioActual} /> },
     productos: { label: 'Productos', componente: <Productos usuarioActual={usuarioActual} /> },
     historial: { label: 'Historial de ventas', componente: <Historial usuarioActual={usuarioActual} /> },
+    clientes: { label: 'Clientes', componente: <Clientes usuarioActual={usuarioActual} /> },
     caja: { label: 'Caja', componente: <Caja /> },
     ...(usuarioActual.rol === 'admin'
       ? { usuarios: { label: 'Vendedores', componente: <Usuarios /> } }

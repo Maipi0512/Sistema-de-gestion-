@@ -125,6 +125,18 @@ export default function Caja() {
                   Lo cobrado por transferencia, débito, crédito o Mercado Pago no se
                   cuenta acá porque no queda plata en el cajón. Está en el Historial de ventas.
                 </p>
+                {resumen.porMetodo.cuenta_corriente && (
+                  <p>
+                    Vendido a cuenta corriente (fiado) en este turno: $
+                    {resumen.porMetodo.cuenta_corriente.total.toFixed(2)}
+                    {' '}({resumen.porMetodo.cuenta_corriente.cantidad} ventas)
+                    <br />
+                    <span className="nota">
+                      Informativo: tampoco es plata en el cajón. Cuando el cliente pague la
+                      deuda, ese cobro se registra desde Clientes.
+                    </span>
+                  </p>
+                )}
               </>
             )}
           </div>

@@ -7,6 +7,7 @@ const ETIQUETA_METODO = {
   transferencia: 'Transferencia',
   mercado_pago: 'Mercado Pago',
   mixto: 'Mixto',
+  cuenta_corriente: 'Cuenta corriente',
 };
 
 // Arma un texto tipo "Efectivo $500 + Transferencia $200" a partir del
@@ -151,6 +152,7 @@ export default function Historial({ usuarioActual }) {
             <th>#</th>
             <th>Fecha</th>
             <th>Vendedor</th>
+            <th>Cliente</th>
             <th>Descripción</th>
             <th>Total</th>
             <th>Método de pago</th>
@@ -164,6 +166,7 @@ export default function Historial({ usuarioActual }) {
                 <td>{v.id}</td>
                 <td>{new Date(v.fecha).toLocaleString('es-AR', { hour12: false })}</td>
                 <td>{v.vendedor_nombre || '-'}</td>
+                <td>{v.cliente_nombre || '-'}</td>
                 <td>{v.descripciones || '-'}</td>
                 <td>${Number(v.total).toFixed(2)}</td>
                 <td>{formatearPagos(v)}</td>
@@ -175,7 +178,7 @@ export default function Historial({ usuarioActual }) {
               </tr>
               {detalleAbierto?.id === v.id && (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="barra-acciones">
                       {editando ? (
                         <>
@@ -222,6 +225,9 @@ export default function Historial({ usuarioActual }) {
                     )}
 
                     <p><strong>Forma de pago:</strong> {formatearPagos(detalleAbierto)}</p>
+                    {detalleAbierto.cliente_nombre && (
+                      <p><strong>Cliente:</strong> {detalleAbierto.cliente_nombre}</p>
+                    )}
                     {(() => {
                       // La venta se guarda por lo cobrado; si se redondeó o se
                       // hizo un descuento no coincide con la suma de los items.

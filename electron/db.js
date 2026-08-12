@@ -337,20 +337,25 @@ async function listarSesionesCaja() {
 
 // pagos: [{ metodo_pago, monto }, ...]. Una venta puede pagarse dividida
 // entre varios métodos (ej. una parte en efectivo y otra por
-// transferencia).
+// transferencia). Si alguno de esos métodos es 'cuenta_corriente', hay
+// que indicar clienteId: además de la venta, se genera un cargo por ese
+// monto en la cuenta corriente del cliente.
 //
 // El total de la venta es lo que realmente se cobró (la suma de los pagos),
 // no la suma de los precios de lista: se redondea el vuelto (1530 → 1500) o
 // se le hace un descuento a una alumna del taller y la caja tiene que cuadrar
 // con la plata que entró. Los precios de lista quedan igual en venta_detalle,
 // así se puede ver la diferencia al abrir el detalle.
-async function crearVenta(items, pagos, usuarioId = null) {
+async function crearVenta(items, pagos, usuarioId = null, clienteId = null) {
   if (!items || items.length === 0) throw new Error('La venta no tiene items');
   if (!pagos || pagos.length === 0) throw new Error('La venta no tiene forma de pago');
 
   const totalPagos = pagos.reduce((acc, p) => acc + Number(p.monto || 0), 0);
   if (pagos.some((p) => !(Number(p.monto) > 0))) {
     throw new Error('Cada forma de pago tiene que tener un monto mayor a cero');
+  }
+  if (pagos.some((p) => p.metodo_pago === 'cuenta_corriente') && !clienteId) {
+    throw new Error('Elegí a qué cliente cargarle la cuenta corriente');
   }
 
   const client = await pool.connect();
@@ -365,8 +370,8 @@ async function crearVenta(items, pagos, usuarioId = null) {
     const metodoPagoResumen = pagos.length === 1 ? pagos[0].metodo_pago : 'mixto';
 
     const { rows: ventaRows } = await client.query(
-      `INSERT INTO ventas (total, metodo_pago, caja_sesion_id, usuario_id) VALUES ($1, $2, $3, $4) RETURNING id, fecha`,
-      [total, metodoPagoResumen, cajaSesionId, usuarioId]
+      `INSERT INTO ventas (total, metodo_pago, caja_sesion_id, usuario_id, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, fecha`,
+      [total, metodoPagoResumen, cajaSesionId, usuarioId, clienteId || null]
     );
     const ventaId = ventaRows[0].id;
 
@@ -375,6 +380,15 @@ async function crearVenta(items, pagos, usuarioId = null) {
         `INSERT INTO venta_pagos (venta_id, metodo_pago, monto) VALUES ($1, $2, $3)`,
         [ventaId, pago.metodo_pago, Number(pago.monto)]
       );
+      // La parte pagada "a cuenta" queda como deuda del cliente: se
+      // registra como cargo, igual que un abono se registra como pago.
+      if (pago.metodo_pago === 'cuenta_corriente') {
+        await client.query(
+          `INSERT INTO cuenta_corriente_movimientos (cliente_id, tipo, monto, venta_id, usuario_id, notas)
+           VALUES ($1, 'cargo', $2, $3, $4, $5)`,
+          [clienteId, Number(pago.monto), ventaId, usuarioId, `Venta #${ventaId}`]
+        );
+      }
     }
 
     for (const item of items) {
@@ -433,7 +447,7 @@ async function crearVenta(items, pagos, usuarioId = null) {
 async function listarVentas(filtro = {}) {
   const { desde, hasta } = filtro;
   const { rows } = await pool.query(
-    `SELECT v.*, u.nombre AS vendedor_nombre,
+    `SELECT v.*, u.nombre AS vendedor_nombre, c.nombre AS cliente_nombre,
        (SELECT string_agg(vd.descripcion, ' | ' ORDER BY vd.id)
           FROM venta_detalle vd
          WHERE vd.venta_id = v.id AND NULLIF(TRIM(vd.descripcion), '') IS NOT NULL
@@ -444,6 +458,7 @@ async function listarVentas(filtro = {}) {
        ) AS pagos
      FROM ventas v
      LEFT JOIN usuarios u ON u.id = v.usuario_id
+     LEFT JOIN clientes c ON c.id = v.cliente_id
      WHERE v.anulada = FALSE
        AND ($1::timestamp IS NULL OR v.fecha >= $1)
        AND ($2::timestamp IS NULL OR v.fecha <= $2)
@@ -457,7 +472,10 @@ async function listarVentas(filtro = {}) {
 // Detalle completo de una venta puntual, con nombre de producto y el
 // desglose de pagos (uno o varios métodos, según cómo se haya cobrado).
 async function obtenerDetalleVenta(ventaId) {
-  const { rows: venta } = await pool.query('SELECT * FROM ventas WHERE id = $1', [ventaId]);
+  const { rows: venta } = await pool.query(
+    `SELECT v.*, c.nombre AS cliente_nombre FROM ventas v LEFT JOIN clientes c ON c.id = v.cliente_id WHERE v.id = $1`,
+    [ventaId]
+  );
   if (venta.length === 0) throw new Error('Venta no encontrada');
 
   const { rows: items } = await pool.query(
@@ -567,6 +585,22 @@ async function anularVenta(ventaId, motivo, usuarioId) {
       );
     }
 
+    // Si una parte de la venta se había cargado a cuenta corriente, hay que
+    // revertir esa deuda también — si no, el cliente queda debiendo por una
+    // venta que ya no existe. Se registra como un 'pago' compensatorio (no
+    // se borra el cargo original) para no perder el rastro en el historial.
+    const { rows: cargosCC } = await client.query(
+      `SELECT id, cliente_id, monto FROM cuenta_corriente_movimientos WHERE venta_id = $1 AND tipo = 'cargo'`,
+      [ventaId]
+    );
+    for (const cargo of cargosCC) {
+      await client.query(
+        `INSERT INTO cuenta_corriente_movimientos (cliente_id, tipo, monto, venta_id, notas)
+         VALUES ($1, 'pago', $2, $3, $4)`,
+        [cargo.cliente_id, cargo.monto, ventaId, 'Reverso automático por anulación de venta']
+      );
+    }
+
     const notaLimpia = motivo && motivo.trim() ? motivo.trim() : null;
     await client.query(
       `UPDATE ventas
@@ -590,6 +624,102 @@ async function anularVenta(ventaId, motivo, usuarioId) {
 async function stockBajo() {
   const { rows } = await pool.query('SELECT * FROM vista_stock_bajo ORDER BY nombre');
   return rows;
+}
+
+// ------------------------------------------------------------
+// CLIENTES / CUENTA CORRIENTE
+// El saldo de cada cliente sale de vista_saldo_clientes (suma de
+// cargos menos suma de pagos), no se guarda como columna aparte.
+// ------------------------------------------------------------
+
+async function listarClientes(filtro = '') {
+  const { rows } = await pool.query(
+    `SELECT * FROM vista_saldo_clientes
+     WHERE activo = TRUE
+       AND ($1 = '' OR nombre ILIKE '%' || $1 || '%' OR telefono ILIKE '%' || $1 || '%')
+     ORDER BY nombre ASC`,
+    [filtro]
+  );
+  return rows;
+}
+
+async function crearCliente({ nombre, telefono, notas }) {
+  if (!nombre || !nombre.trim()) throw new Error('El cliente necesita un nombre');
+  const { rows } = await pool.query(
+    `INSERT INTO clientes (nombre, telefono, notas) VALUES ($1, $2, $3) RETURNING *`,
+    [nombre.trim(), telefono || null, notas || null]
+  );
+  return { ...rows[0], saldo: 0 };
+}
+
+async function actualizarCliente(id, cambios) {
+  const campos = Object.keys(cambios);
+  const valores = Object.values(cambios);
+  const set = campos.map((c, i) => `${c} = $${i + 2}`).join(', ');
+  const { rows } = await pool.query(
+    `UPDATE clientes SET ${set} WHERE id = $1 RETURNING *`,
+    [id, ...valores]
+  );
+  return rows[0];
+}
+
+async function obtenerCliente(id) {
+  const { rows } = await pool.query('SELECT * FROM vista_saldo_clientes WHERE id = $1', [id]);
+  if (rows.length === 0) throw new Error('Cliente no encontrado');
+  return rows[0];
+}
+
+async function listarMovimientosCliente(clienteId) {
+  const { rows } = await pool.query(
+    `SELECT m.*, u.nombre AS usuario_nombre
+     FROM cuenta_corriente_movimientos m
+     LEFT JOIN usuarios u ON u.id = m.usuario_id
+     WHERE m.cliente_id = $1
+     ORDER BY m.creado_en DESC`,
+    [clienteId]
+  );
+  return rows;
+}
+
+// Registra un abono de un cliente contra su deuda. Si se cobra en
+// efectivo y hay una caja abierta, ese ingreso también se refleja en
+// movimientos_caja (como los retiros/ingresos manuales), para que el
+// efectivo esperado de la caja incluya la plata que realmente entró.
+async function registrarPagoCuentaCorriente(clienteId, monto, metodoPago = 'efectivo', notas = '', usuarioId = null) {
+  if (!(Number(monto) > 0)) throw new Error('El monto debe ser mayor a cero');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: clienteRows } = await client.query('SELECT nombre FROM clientes WHERE id = $1 FOR UPDATE', [clienteId]);
+    if (clienteRows.length === 0) throw new Error('Cliente no encontrado');
+
+    const { rows: movRows } = await client.query(
+      `INSERT INTO cuenta_corriente_movimientos (cliente_id, tipo, monto, metodo_pago, usuario_id, notas)
+       VALUES ($1, 'pago', $2, $3, $4, $5) RETURNING *`,
+      [clienteId, Number(monto), metodoPago, usuarioId, notas || null]
+    );
+
+    if (metodoPago === 'efectivo') {
+      const cajaRows = await client.query(`SELECT id FROM caja_sesiones WHERE estado = 'abierta' LIMIT 1`);
+      if (cajaRows.rows[0]) {
+        await client.query(
+          `INSERT INTO movimientos_caja (caja_sesion_id, tipo, monto, concepto)
+           VALUES ($1, 'ingreso', $2, $3)`,
+          [cajaRows.rows[0].id, Number(monto), `Cobro cta. cte. - ${clienteRows[0].nombre}`]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    return movRows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = {
@@ -618,4 +748,10 @@ module.exports = {
   listarSesionesCaja,
   registrarMovimientoCaja,
   listarMovimientosCaja,
+  listarClientes,
+  crearCliente,
+  actualizarCliente,
+  obtenerCliente,
+  listarMovimientosCliente,
+  registrarPagoCuentaCorriente,
 };

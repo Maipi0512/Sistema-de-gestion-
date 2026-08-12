@@ -6,6 +6,7 @@ const METODOS_PAGO = [
   { value: 'credito', label: 'Crédito' },
   { value: 'transferencia', label: 'Transferencia' },
   { value: 'mercado_pago', label: 'Mercado Pago' },
+  { value: 'cuenta_corriente', label: 'Cuenta corriente (fiado)' },
 ];
 
 export default function Vender({ usuarioActual }) {
@@ -16,6 +17,12 @@ export default function Vender({ usuarioActual }) {
   // efectivo y otra por transferencia). Cada renglón es {id, metodo, monto}.
   const [pagos, setPagos] = useState([{ id: 1, metodo: 'efectivo', monto: '' }]);
   const [mensaje, setMensaje] = useState('');
+
+  // Solo hace falta elegir cliente cuando alguna forma de pago es "cuenta
+  // corriente": ese monto queda como deuda de ese cliente.
+  const [busquedaCliente, setBusquedaCliente] = useState('');
+  const [resultadosClientes, setResultadosClientes] = useState([]);
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
 
   // Cada renglón del carrito lleva su propio número de línea. No alcanza
   // con el producto_id: dos arreglos del mismo tipo pueden ser de personas
@@ -30,6 +37,20 @@ export default function Vender({ usuarioActual }) {
     }
     window.api.productos.listar(busqueda).then(setResultados);
   }, [busqueda]);
+
+  useEffect(() => {
+    if (busquedaCliente.trim() === '') {
+      setResultadosClientes([]);
+      return;
+    }
+    window.api.clientes.listar(busquedaCliente).then(setResultadosClientes);
+  }, [busquedaCliente]);
+
+  const elegirCliente = (cliente) => {
+    setClienteSeleccionado(cliente);
+    setBusquedaCliente('');
+    setResultadosClientes([]);
+  };
 
   const agregarAlCarrito = (producto) => {
     const nuevaLinea = proximaLinea.current++;
@@ -123,6 +144,7 @@ export default function Vender({ usuarioActual }) {
   // del taller. La venta se registra por el monto cobrado.
   const totalPagos = pagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
   const diferenciaPagos = Math.round((total - totalPagos) * 100) / 100;
+  const necesitaCliente = pagos.some((p) => p.metodo === 'cuenta_corriente');
 
   // Completa este renglón con lo que todavía falta cubrir del total,
   // para no tener que sacar la cuenta a mano cuando se reparte el pago.
@@ -161,6 +183,11 @@ export default function Vender({ usuarioActual }) {
       return;
     }
 
+    if (necesitaCliente && !clienteSeleccionado) {
+      setMensaje('Error: elegí a qué cliente cargarle la cuenta corriente');
+      return;
+    }
+
     // A propósito no se exige que los pagos den justo el precio de lista: la
     // venta se registra por lo que se cobró.
 
@@ -174,13 +201,19 @@ export default function Vender({ usuarioActual }) {
         descripcion: it.descripcion,
       }));
       const pagosPayload = pagos.map((p) => ({ metodo_pago: p.metodo, monto: Number(p.monto) }));
-      const venta = await window.api.ventas.crear(items, pagosPayload, usuarioActual?.id ?? null);
+      const venta = await window.api.ventas.crear(
+        items,
+        pagosPayload,
+        usuarioActual?.id ?? null,
+        necesitaCliente ? clienteSeleccionado.id : null
+      );
       const aviso = diferenciaPagos > 0
         ? ` (descuento de $${diferenciaPagos.toFixed(2)} sobre $${total.toFixed(2)})`
         : '';
       setMensaje(`Venta #${venta.id} registrada — Cobrado: $${venta.total.toFixed(2)}${aviso}`);
       setCarrito([]);
       setPagos([{ id: proximoPago.current++, metodo: 'efectivo', monto: '' }]);
+      setClienteSeleccionado(null);
     } catch (err) {
       setMensaje(`Error: ${err.message}`);
     }
@@ -317,6 +350,38 @@ export default function Vender({ usuarioActual }) {
           </div>
         ))}
         <button type="button" onClick={agregarPago}>+ Agregar otra forma de pago</button>
+
+        {necesitaCliente && (
+          <div style={{ marginTop: 8 }}>
+            <label>
+              Cliente (para la cuenta corriente)
+              <input
+                type="text"
+                placeholder="Buscar cliente por nombre..."
+                value={clienteSeleccionado ? clienteSeleccionado.nombre : busquedaCliente}
+                onChange={(e) => {
+                  setClienteSeleccionado(null);
+                  setBusquedaCliente(e.target.value);
+                }}
+              />
+            </label>
+            {resultadosClientes.length > 0 && !clienteSeleccionado && (
+              <ul className="lista-resultados">
+                {resultadosClientes.map((c) => (
+                  <li key={c.id} onClick={() => elegirCliente(c)}>
+                    {c.nombre} {c.telefono ? `(${c.telefono})` : ''} — saldo actual: ${Number(c.saldo).toFixed(2)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {clienteSeleccionado && (
+              <p className="nota">
+                Cliente elegido: {clienteSeleccionado.nombre} (saldo actual: ${Number(clienteSeleccionado.saldo).toFixed(2)}).{' '}
+                <button type="button" onClick={() => setClienteSeleccionado(null)}>Cambiar</button>
+              </p>
+            )}
+          </div>
+        )}
 
         <p>
           Se cobra: ${totalPagos.toFixed(2)}

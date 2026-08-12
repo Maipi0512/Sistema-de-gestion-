@@ -19,6 +19,7 @@ almacen-costura-sistema/
 │   ├── pantallas/
 │   │   ├── Dashboard.jsx    # Alertas de stock bajo
 │   │   ├── Productos.jsx    # Alta y listado de productos
+│   │   ├── Clientes.jsx     # Clientes y cuenta corriente (fiado/abonos)
 │   │   └── Vender.jsx       # Punto de venta
 │   ├── App.jsx
 │   ├── main.jsx
@@ -58,6 +59,7 @@ falten, una sola vez cada una:
 \c almacen_costura
 \i 'C:/ruta/completa/al/proyecto/db/migracion-01-descripcion-venta.sql'
 \i 'C:/ruta/completa/al/proyecto/db/migracion-02-multipago.sql'
+\i 'C:/ruta/completa/al/proyecto/db/migracion-03-cuenta-corriente.sql'
 ```
 
 ### 3. Instalar dependencias del proyecto
@@ -250,16 +252,30 @@ no hace falta volver a instalar a mano.
   parte en efectivo y otra por transferencia); la pantalla no deja
   confirmar si lo cargado en las formas de pago no cubre exactamente
   el total.
-- **Historial de ventas**: todas las ventas con fecha, vendedor,
-  descripción, total y detalle de productos vendidos. Desde el detalle
-  se pueden **editar las descripciones** de una venta ya registrada,
-  por si en el momento se olvidaron de anotar de quién era. Editar la
-  descripción no toca montos, stock ni método de pago.
+- **Historial de ventas**: todas las ventas con fecha, vendedor, cliente
+  (si se vendió a cuenta corriente), descripción, total y detalle de
+  productos vendidos. Desde el detalle se pueden **editar las
+  descripciones** de una venta ya registrada, por si en el momento se
+  olvidaron de anotar de quién era. Editar la descripción no toca
+  montos, stock ni método de pago.
+- **Clientes / Cuenta corriente**: alta de clientes (nombre, teléfono,
+  notas). En **Vender**, "Cuenta corriente" es una forma de pago más
+  (se puede combinar con otras, ej. una parte en efectivo y el resto
+  fiado): al confirmar la venta, esa parte queda como deuda del
+  cliente elegido. Desde **Clientes** se ve el saldo de cada uno, el
+  historial completo de cargos y pagos, y se registran **abonos**
+  (parciales o totales) indicando con qué se cobraron. Un abono en
+  efectivo se suma automáticamente como ingreso en la caja abierta, si
+  hay una. Si se **anula** una venta que tenía una parte a cuenta
+  corriente, esa deuda se revierte sola. Requiere haber corrido
+  `migracion-03-cuenta-corriente.sql` sobre una base ya existente.
 - **Caja**: apertura con monto inicial, cierre con conteo físico y
   cálculo automático de diferencia (sobrante/faltante). La caja muestra
   **solo lo cobrado en efectivo**, porque es lo único que queda
   físicamente en el cajón; transferencias, débito, crédito y Mercado
-  Pago se consultan en el Historial de ventas.
+  Pago se consultan en el Historial de ventas. Lo vendido a cuenta
+  corriente en el turno se muestra aparte, a modo informativo (tampoco
+  es plata física hasta que el cliente pague).
 - **Exportar a Excel**: tanto el listado de productos como el
   historial de ventas (respetando el filtro de fechas que hayas
   aplicado) se pueden exportar a un `.xlsx` con un botón.
