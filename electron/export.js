@@ -32,8 +32,10 @@ function formatearItem(it) {
   return `${it.producto_nombre}${color} ${cantidad} = $${Number(it.subtotal).toFixed(2)}`;
 }
 
-// Agrupa el detalle línea por línea en un texto por venta (una celda),
-// ej: "Tela roja x2 = $500.00 | Hilo blanco x1 = $100.00".
+// Agrupa el detalle en un texto por venta (una celda), un producto por
+// renglón dentro de esa misma celda:
+//   Tela roja x2 = $500.00
+//   Hilo blanco x1 = $100.00
 function agruparDetallePorVenta(itemsVendidos) {
   const porVenta = {};
   itemsVendidos.forEach((it) => {
@@ -42,7 +44,7 @@ function agruparDetallePorVenta(itemsVendidos) {
   });
   const resultado = {};
   Object.entries(porVenta).forEach(([ventaId, items]) => {
-    resultado[ventaId] = items.join(' | ');
+    resultado[ventaId] = items.join('\n');
   });
   return resultado;
 }
@@ -69,18 +71,26 @@ async function exportarVentasExcel(filtro = {}) {
     { header: 'Método de pago', key: 'metodo_pago', width: 30 },
   ];
   hoja.getRow(1).font = { bold: true };
+  // Wrap para que se vea un producto por renglón dentro de la misma celda,
+  // en vez de una sola línea larga.
+  hoja.getColumn('detalleProductos').alignment = { wrapText: true, vertical: 'top' };
 
   ventas.forEach((v) => {
-    hoja.addRow({
+    const detalle = detallePorVenta[v.id] || '';
+    const fila = hoja.addRow({
       id: v.id,
       fecha: new Date(v.fecha).toLocaleString('es-AR'),
       vendedor: v.vendedor_nombre || '-',
       cliente: v.cliente_nombre || '-',
-      detalleProductos: detallePorVenta[v.id] || '',
+      detalleProductos: detalle,
       descripciones: v.descripciones || '',
       total: Number(v.total),
       metodo_pago: formatearPagos(v),
     });
+    // Alto de fila proporcional a la cantidad de productos, así se ven
+    // todos los renglones sin tener que agrandarla a mano.
+    const cantidadLineas = detalle ? detalle.split('\n').length : 1;
+    fila.height = Math.max(15, cantidadLineas * 14);
   });
 
   const totalGeneral = ventas.reduce((acc, v) => acc + Number(v.total), 0);
