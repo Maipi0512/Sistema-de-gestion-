@@ -23,11 +23,37 @@ function formatearPagos(venta) {
     .join(' + ');
 }
 
+// "Tela roja (Rojo) x2 = $500.00" — una línea por producto vendido.
+function formatearItem(it) {
+  const color = it.color ? ` (${it.color})` : '';
+  const cantidad = it.unidades_por_paquete
+    ? `${Number(it.cantidad)} paquete(s) x ${Number(it.unidades_por_paquete)}`
+    : `x${Number(it.cantidad)}`;
+  return `${it.producto_nombre}${color} ${cantidad} = $${Number(it.subtotal).toFixed(2)}`;
+}
+
+// Agrupa el detalle línea por línea en un texto por venta (una celda),
+// ej: "Tela roja x2 = $500.00 | Hilo blanco x1 = $100.00".
+function agruparDetallePorVenta(itemsVendidos) {
+  const porVenta = {};
+  itemsVendidos.forEach((it) => {
+    if (!porVenta[it.venta_id]) porVenta[it.venta_id] = [];
+    porVenta[it.venta_id].push(formatearItem(it));
+  });
+  const resultado = {};
+  Object.entries(porVenta).forEach(([ventaId, items]) => {
+    resultado[ventaId] = items.join(' | ');
+  });
+  return resultado;
+}
+
 async function exportarVentasExcel(filtro = {}) {
   const [ventas, itemsVendidos] = await Promise.all([
     db.listarVentas(filtro),
     db.listarDetalleVentas(filtro),
   ]);
+
+  const detallePorVenta = agruparDetallePorVenta(itemsVendidos);
 
   const workbook = new ExcelJS.Workbook();
   const hoja = workbook.addWorksheet('Ventas');
@@ -37,6 +63,7 @@ async function exportarVentasExcel(filtro = {}) {
     { header: 'Fecha', key: 'fecha', width: 20 },
     { header: 'Vendedor', key: 'vendedor', width: 20 },
     { header: 'Cliente', key: 'cliente', width: 20 },
+    { header: 'Detalle (productos vendidos)', key: 'detalleProductos', width: 55 },
     { header: 'Descripción', key: 'descripciones', width: 35 },
     { header: 'Total', key: 'total', width: 14 },
     { header: 'Método de pago', key: 'metodo_pago', width: 30 },
@@ -49,6 +76,7 @@ async function exportarVentasExcel(filtro = {}) {
       fecha: new Date(v.fecha).toLocaleString('es-AR'),
       vendedor: v.vendedor_nombre || '-',
       cliente: v.cliente_nombre || '-',
+      detalleProductos: detallePorVenta[v.id] || '',
       descripciones: v.descripciones || '',
       total: Number(v.total),
       metodo_pago: formatearPagos(v),
