@@ -1,6 +1,6 @@
 {
   "name": "almacen-costura-sistema",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Sistema de gestión de ventas y stock — Almacén de Costura",
   "main": "electron/main.js",
   "scripts": {
