@@ -25,9 +25,11 @@ export default function Caja({ usuarioActual }) {
   const [conceptoMov, setConceptoMov] = useState('');
   const [errorMov, setErrorMov] = useState('');
 
-  // Detalle de una caja ya cerrada, del historial de abajo: resumen por
-  // método de pago + movimientos manuales de esa sesión puntual.
-  const [detalleSesion, setDetalleSesion] = useState(null); // { id, resumen, movimientos }
+  // Detalle de cada caja del historial de abajo: resumen por método de
+  // pago + movimientos manuales de esa sesión puntual. Se muestra siempre,
+  // sin tener que desplegarlo, así que se trae de una para todas las
+  // sesiones del historial al cargar la pantalla.
+  const [detallesHistorial, setDetallesHistorial] = useState({}); // { [sesionId]: { resumen, movimientos } }
 
   const cargarTodo = async () => {
     const actual = await window.api.caja.actual();
@@ -42,6 +44,18 @@ export default function Caja({ usuarioActual }) {
     }
     const sesiones = await window.api.caja.listarSesiones();
     setHistorialSesiones(sesiones);
+
+    const detalles = await Promise.all(
+      sesiones.map((s) =>
+        Promise.all([window.api.caja.resumen(s.id), window.api.caja.listarMovimientos(s.id)])
+      )
+    );
+    const detallesPorId = {};
+    sesiones.forEach((s, i) => {
+      detallesPorId[s.id] = { resumen: detalles[i][0], movimientos: detalles[i][1] };
+    });
+    setDetallesHistorial(detallesPorId);
+
     setCargando(false);
   };
 
@@ -92,18 +106,6 @@ export default function Caja({ usuarioActual }) {
     } catch (err) {
       setErrorMov(err.message);
     }
-  };
-
-  const verDetalleSesion = async (sesion) => {
-    if (detalleSesion?.id === sesion.id) {
-      setDetalleSesion(null);
-      return;
-    }
-    const [resumenSesion, movimientosSesion] = await Promise.all([
-      window.api.caja.resumen(sesion.id),
-      window.api.caja.listarMovimientos(sesion.id),
-    ]);
-    setDetalleSesion({ id: sesion.id, resumen: resumenSesion, movimientos: movimientosSesion });
   };
 
   if (cargando) return <p>Cargando...</p>;
@@ -237,73 +239,76 @@ export default function Caja({ usuarioActual }) {
               <th>Esperado</th>
               <th>Contado</th>
               <th>Diferencia</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
-            {historialSesiones.map((s) => (
-              <React.Fragment key={s.id}>
-                <tr>
-                  <td>{new Date(s.fecha_apertura).toLocaleString('es-AR', { hour12: false })}</td>
-                  <td>{s.usuario_apertura_nombre || '-'}</td>
-                  <td>{s.fecha_cierre ? new Date(s.fecha_cierre).toLocaleString('es-AR', { hour12: false }) : '—'}</td>
-                  <td>{s.usuario_cierre_nombre || '-'}</td>
-                  <td>${Number(s.monto_apertura).toFixed(2)}</td>
-                  <td>{s.monto_esperado != null ? `$${Number(s.monto_esperado).toFixed(2)}` : '—'}</td>
-                  <td>{s.monto_contado != null ? `$${Number(s.monto_contado).toFixed(2)}` : '—'}</td>
-                  <td className={s.diferencia && s.diferencia !== 0 ? 'stock-bajo' : ''}>
-                    {s.diferencia != null ? `$${Number(s.diferencia).toFixed(2)}` : '—'}
-                  </td>
-                  <td>
-                    <button onClick={() => verDetalleSesion(s)}>
-                      {detalleSesion?.id === s.id ? 'Ocultar' : 'Ver detalle'}
-                    </button>
-                  </td>
-                </tr>
-                {detalleSesion?.id === s.id && (
+            {historialSesiones.map((s) => {
+              const detalle = detallesHistorial[s.id];
+              return (
+                <React.Fragment key={s.id}>
                   <tr>
-                    <td colSpan={9}>
-                      <p>
-                        Ventas en efectivo: ${detalleSesion.resumen.totalEfectivo.toFixed(2)}
-                        {' '}({detalleSesion.resumen.porMetodo.efectivo ? detalleSesion.resumen.porMetodo.efectivo.cantidad : 0} ventas)
-                        {' '}— Ingresos manuales: ${detalleSesion.resumen.totalIngresos.toFixed(2)}
-                        {' '}— Egresos manuales: ${detalleSesion.resumen.totalEgresos.toFixed(2)}
-                      </p>
-                      {Object.keys(detalleSesion.resumen.porMetodo).length > 0 && (
-                        <p className="nota">
-                          Vendido por método:{' '}
-                          {Object.entries(detalleSesion.resumen.porMetodo)
-                            .map(([metodo, datos]) => `${ETIQUETA_METODO[metodo] || metodo} $${datos.total.toFixed(2)} (${datos.cantidad})`)
-                            .join(' · ')}
-                        </p>
-                      )}
-
-                      <h4 style={{ marginBottom: 4 }}>Movimientos manuales del turno</h4>
-                      {detalleSesion.movimientos.length === 0 ? (
-                        <p className="nota">No hubo retiros, pagos ni ingresos extra en este turno.</p>
+                    <td>{new Date(s.fecha_apertura).toLocaleString('es-AR', { hour12: false })}</td>
+                    <td>{s.usuario_apertura_nombre || '-'}</td>
+                    <td>{s.fecha_cierre ? new Date(s.fecha_cierre).toLocaleString('es-AR', { hour12: false }) : '—'}</td>
+                    <td>{s.usuario_cierre_nombre || '-'}</td>
+                    <td>${Number(s.monto_apertura).toFixed(2)}</td>
+                    <td>{s.monto_esperado != null ? `$${Number(s.monto_esperado).toFixed(2)}` : '—'}</td>
+                    <td>{s.monto_contado != null ? `$${Number(s.monto_contado).toFixed(2)}` : '—'}</td>
+                    <td className={s.diferencia && s.diferencia !== 0 ? 'stock-bajo' : ''}>
+                      {s.diferencia != null ? `$${Number(s.diferencia).toFixed(2)}` : '—'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={8} style={{ background: '#fafbfc' }}>
+                      {!detalle ? (
+                        <p className="nota">Cargando detalle...</p>
                       ) : (
-                        <table className="tabla">
-                          <thead>
-                            <tr><th>Hora</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Registrado por</th></tr>
-                          </thead>
-                          <tbody>
-                            {detalleSesion.movimientos.map((m) => (
-                              <tr key={m.id}>
-                                <td>{new Date(m.creado_en).toLocaleString('es-AR', { hour12: false })}</td>
-                                <td>{m.tipo === 'egreso' ? 'Egreso' : 'Ingreso'}</td>
-                                <td>{m.concepto}</td>
-                                <td className={m.tipo === 'egreso' ? 'stock-bajo' : ''}>${Number(m.monto).toFixed(2)}</td>
-                                <td>{m.usuario_nombre || '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <>
+                          <p>
+                            Ventas en efectivo: ${detalle.resumen.totalEfectivo.toFixed(2)}
+                            {' '}({detalle.resumen.porMetodo.efectivo ? detalle.resumen.porMetodo.efectivo.cantidad : 0} ventas)
+                            {' '}— Ingresos manuales: ${detalle.resumen.totalIngresos.toFixed(2)}
+                            {' '}— Egresos manuales: ${detalle.resumen.totalEgresos.toFixed(2)}
+                          </p>
+                          {Object.keys(detalle.resumen.porMetodo).length > 0 && (
+                            <p className="nota">
+                              Vendido por método:{' '}
+                              {Object.entries(detalle.resumen.porMetodo)
+                                .map(([metodo, datos]) => `${ETIQUETA_METODO[metodo] || metodo} $${datos.total.toFixed(2)} (${datos.cantidad})`)
+                                .join(' · ')}
+                            </p>
+                          )}
+
+                          {detalle.movimientos.length === 0 ? (
+                            <p className="nota">No hubo retiros, pagos ni ingresos extra en este turno.</p>
+                          ) : (
+                            <>
+                              <p style={{ margin: '10px 0 4px 0', fontWeight: 'bold' }}>Movimientos manuales del turno:</p>
+                              <table className="tabla">
+                                <thead>
+                                  <tr><th>Hora</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Registrado por</th></tr>
+                                </thead>
+                                <tbody>
+                                  {detalle.movimientos.map((m) => (
+                                    <tr key={m.id}>
+                                      <td>{new Date(m.creado_en).toLocaleString('es-AR', { hour12: false })}</td>
+                                      <td>{m.tipo === 'egreso' ? 'Egreso' : 'Ingreso'}</td>
+                                      <td>{m.concepto}</td>
+                                      <td className={m.tipo === 'egreso' ? 'stock-bajo' : ''}>${Number(m.monto).toFixed(2)}</td>
+                                      <td>{m.usuario_nombre || '-'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </section>
