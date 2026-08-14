@@ -40,12 +40,13 @@ contextBridge.exposeInMainWorld('api', {
   },
   caja: {
     actual: () => ipcRenderer.invoke('caja:actual'),
-    abrir: (montoApertura, notas) => ipcRenderer.invoke('caja:abrir', montoApertura, notas),
-    cerrar: (sesionId, montoContado, notas) => ipcRenderer.invoke('caja:cerrar', sesionId, montoContado, notas),
+    abrir: (montoApertura, notas, usuarioId) => ipcRenderer.invoke('caja:abrir', montoApertura, notas, usuarioId),
+    cerrar: (sesionId, montoContado, notas, usuarioId) =>
+      ipcRenderer.invoke('caja:cerrar', sesionId, montoContado, notas, usuarioId),
     resumen: (sesionId) => ipcRenderer.invoke('caja:resumen', sesionId),
     listarSesiones: () => ipcRenderer.invoke('caja:listarSesiones'),
-    registrarMovimiento: (sesionId, tipo, monto, concepto) =>
-      ipcRenderer.invoke('caja:registrarMovimiento', sesionId, tipo, monto, concepto),
+    registrarMovimiento: (sesionId, tipo, monto, concepto, usuarioId) =>
+      ipcRenderer.invoke('caja:registrarMovimiento', sesionId, tipo, monto, concepto, usuarioId),
     listarMovimientos: (sesionId) => ipcRenderer.invoke('caja:listarMovimientos', sesionId),
   },
   dashboard: {

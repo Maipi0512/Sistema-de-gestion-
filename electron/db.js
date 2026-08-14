@@ -223,18 +223,21 @@ async function ajustarStock(id, cantidad, motivo = 'ajuste_manual', notas = '') 
 
 async function cajaActual() {
   const { rows } = await pool.query(
-    `SELECT * FROM caja_sesiones WHERE estado = 'abierta' LIMIT 1`
+    `SELECT cs.*, u.nombre AS usuario_apertura_nombre
+     FROM caja_sesiones cs
+     LEFT JOIN usuarios u ON u.id = cs.usuario_apertura_id
+     WHERE cs.estado = 'abierta' LIMIT 1`
   );
   return rows[0] || null;
 }
 
-async function abrirCaja(montoApertura, notas = '') {
+async function abrirCaja(montoApertura, notas = '', usuarioId = null) {
   const actual = await cajaActual();
   if (actual) throw new Error('Ya hay una caja abierta');
 
   const { rows } = await pool.query(
-    `INSERT INTO caja_sesiones (monto_apertura, notas) VALUES ($1, $2) RETURNING *`,
-    [montoApertura, notas]
+    `INSERT INTO caja_sesiones (monto_apertura, notas, usuario_apertura_id) VALUES ($1, $2, $3) RETURNING *`,
+    [montoApertura, notas, usuarioId]
   );
   return rows[0];
 }
@@ -280,28 +283,32 @@ async function resumenCaja(sesionId) {
 
 // Registra un retiro, pago de servicio, o ingreso extra de efectivo
 // que no es una venta (ej: "Pago de luz", "Retiro para el banco").
-async function registrarMovimientoCaja(sesionId, tipo, monto, concepto) {
+async function registrarMovimientoCaja(sesionId, tipo, monto, concepto, usuarioId = null) {
   if (!['ingreso', 'egreso'].includes(tipo)) throw new Error('Tipo de movimiento inválido');
   if (!concepto || !concepto.trim()) throw new Error('El movimiento necesita un concepto');
   if (!monto || monto <= 0) throw new Error('El monto debe ser mayor a cero');
 
   const { rows } = await pool.query(
-    `INSERT INTO movimientos_caja (caja_sesion_id, tipo, monto, concepto)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [sesionId, tipo, monto, concepto.trim()]
+    `INSERT INTO movimientos_caja (caja_sesion_id, tipo, monto, concepto, usuario_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [sesionId, tipo, monto, concepto.trim(), usuarioId]
   );
   return rows[0];
 }
 
 async function listarMovimientosCaja(sesionId) {
   const { rows } = await pool.query(
-    `SELECT * FROM movimientos_caja WHERE caja_sesion_id = $1 ORDER BY creado_en DESC`,
+    `SELECT mc.*, u.nombre AS usuario_nombre
+     FROM movimientos_caja mc
+     LEFT JOIN usuarios u ON u.id = mc.usuario_id
+     WHERE mc.caja_sesion_id = $1
+     ORDER BY mc.creado_en DESC`,
     [sesionId]
   );
   return rows;
 }
 
-async function cerrarCaja(sesionId, montoContado, notas = '') {
+async function cerrarCaja(sesionId, montoContado, notas = '', usuarioId = null) {
   const sesion = await pool.query('SELECT * FROM caja_sesiones WHERE id = $1', [sesionId]);
   if (sesion.rows.length === 0) throw new Error('Sesión de caja no encontrada');
   if (sesion.rows[0].estado === 'cerrada') throw new Error('Esa caja ya está cerrada');
@@ -314,17 +321,22 @@ async function cerrarCaja(sesionId, montoContado, notas = '') {
   const { rows } = await pool.query(
     `UPDATE caja_sesiones
      SET estado = 'cerrada', fecha_cierre = NOW(), monto_contado = $1,
-         monto_esperado = $2, diferencia = $3, notas = COALESCE(NULLIF($4, ''), notas)
-     WHERE id = $5
+         monto_esperado = $2, diferencia = $3, notas = COALESCE(NULLIF($4, ''), notas),
+         usuario_cierre_id = $5
+     WHERE id = $6
      RETURNING *`,
-    [montoContado, montoEsperado, diferencia, notas, sesionId]
+    [montoContado, montoEsperado, diferencia, notas, usuarioId, sesionId]
   );
   return rows[0];
 }
 
 async function listarSesionesCaja() {
   const { rows } = await pool.query(
-    `SELECT * FROM caja_sesiones ORDER BY fecha_apertura DESC LIMIT 50`
+    `SELECT cs.*, ua.nombre AS usuario_apertura_nombre, uc.nombre AS usuario_cierre_nombre
+     FROM caja_sesiones cs
+     LEFT JOIN usuarios ua ON ua.id = cs.usuario_apertura_id
+     LEFT JOIN usuarios uc ON uc.id = cs.usuario_cierre_id
+     ORDER BY cs.fecha_apertura DESC LIMIT 50`
   );
   return rows;
 }

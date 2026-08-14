@@ -61,6 +61,7 @@ falten, una sola vez cada una:
 \i 'C:/ruta/completa/al/proyecto/db/migracion-02-multipago.sql'
 \i 'C:/ruta/completa/al/proyecto/db/migracion-03-cuenta-corriente.sql'
 \i 'C:/ruta/completa/al/proyecto/db/migracion-04-seguridad-rls.sql'
+\i 'C:/ruta/completa/al/proyecto/db/migracion-05-caja-detalle.sql'
 ```
 
 ### 3. Instalar dependencias del proyecto
@@ -276,7 +277,12 @@ no hace falta volver a instalar a mano.
   físicamente en el cajón; transferencias, débito, crédito y Mercado
   Pago se consultan en el Historial de ventas. Lo vendido a cuenta
   corriente en el turno se muestra aparte, a modo informativo (tampoco
-  es plata física hasta que el cliente pague).
+  es plata física hasta que el cliente pague). Queda registrado
+  **quién abrió y quién cerró** cada caja. El **Historial de cajas**
+  tiene un botón "Ver detalle" por sesión (esté abierta o ya cerrada)
+  que muestra el desglose de ventas por método de pago y **todos los
+  movimientos manuales del turno** (retiros, pagos de servicios,
+  ingresos extra) con hora, concepto, monto y quién lo registró.
 - **Exportar a Excel**: tanto el listado de productos como el
   historial de ventas (respetando el filtro de fechas que hayas
   aplicado) se pueden exportar a un `.xlsx` con un botón. El de ventas

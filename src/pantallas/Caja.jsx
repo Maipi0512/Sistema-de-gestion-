@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from 'react';
 
-export default function Caja() {
+const ETIQUETA_METODO = {
+  efectivo: 'Efectivo',
+  debito: 'Débito',
+  credito: 'Crédito',
+  transferencia: 'Transferencia',
+  mercado_pago: 'Mercado Pago',
+  cuenta_corriente: 'Cuenta corriente',
+};
+
+export default function Caja({ usuarioActual }) {
   const [caja, setCaja] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [montoApertura, setMontoApertura] = useState('');
@@ -15,6 +24,10 @@ export default function Caja() {
   const [montoMov, setMontoMov] = useState('');
   const [conceptoMov, setConceptoMov] = useState('');
   const [errorMov, setErrorMov] = useState('');
+
+  // Detalle de una caja ya cerrada, del historial de abajo: resumen por
+  // método de pago + movimientos manuales de esa sesión puntual.
+  const [detalleSesion, setDetalleSesion] = useState(null); // { id, resumen, movimientos }
 
   const cargarTodo = async () => {
     const actual = await window.api.caja.actual();
@@ -40,7 +53,7 @@ export default function Caja() {
     e.preventDefault();
     setMensaje('');
     try {
-      await window.api.caja.abrir(parseFloat(montoApertura) || 0);
+      await window.api.caja.abrir(parseFloat(montoApertura) || 0, '', usuarioActual?.id ?? null);
       setMontoApertura('');
       cargarTodo();
     } catch (err) {
@@ -52,7 +65,7 @@ export default function Caja() {
     e.preventDefault();
     setMensaje('');
     try {
-      const cerrada = await window.api.caja.cerrar(caja.id, parseFloat(montoContado) || 0);
+      const cerrada = await window.api.caja.cerrar(caja.id, parseFloat(montoContado) || 0, '', usuarioActual?.id ?? null);
       const dif = Number(cerrada.diferencia);
       setMensaje(
         dif === 0
@@ -72,13 +85,25 @@ export default function Caja() {
     e.preventDefault();
     setErrorMov('');
     try {
-      await window.api.caja.registrarMovimiento(caja.id, tipoMov, parseFloat(montoMov), conceptoMov);
+      await window.api.caja.registrarMovimiento(caja.id, tipoMov, parseFloat(montoMov), conceptoMov, usuarioActual?.id ?? null);
       setMontoMov('');
       setConceptoMov('');
       cargarTodo();
     } catch (err) {
       setErrorMov(err.message);
     }
+  };
+
+  const verDetalleSesion = async (sesion) => {
+    if (detalleSesion?.id === sesion.id) {
+      setDetalleSesion(null);
+      return;
+    }
+    const [resumenSesion, movimientosSesion] = await Promise.all([
+      window.api.caja.resumen(sesion.id),
+      window.api.caja.listarMovimientos(sesion.id),
+    ]);
+    setDetalleSesion({ id: sesion.id, resumen: resumenSesion, movimientos: movimientosSesion });
   };
 
   if (cargando) return <p>Cargando...</p>;
@@ -102,7 +127,10 @@ export default function Caja() {
         <>
           <div className="tarjeta">
             <h3>Caja abierta desde {new Date(caja.fecha_apertura).toLocaleString('es-AR', { hour12: false })}</h3>
-            <p>Monto de apertura: ${Number(caja.monto_apertura).toFixed(2)}</p>
+            <p>
+              Monto de apertura: ${Number(caja.monto_apertura).toFixed(2)}
+              {caja.usuario_apertura_nombre && ` — abierta por ${caja.usuario_apertura_nombre}`}
+            </p>
 
             {resumen && (
               <>
@@ -167,7 +195,7 @@ export default function Caja() {
 
             {movimientos.length > 0 && (
               <table className="tabla" style={{ marginTop: 12 }}>
-                <thead><tr><th>Hora</th><th>Tipo</th><th>Concepto</th><th>Monto</th></tr></thead>
+                <thead><tr><th>Hora</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Registrado por</th></tr></thead>
                 <tbody>
                   {movimientos.map((m) => (
                     <tr key={m.id}>
@@ -175,6 +203,7 @@ export default function Caja() {
                       <td>{m.tipo === 'egreso' ? 'Egreso' : 'Ingreso'}</td>
                       <td>{m.concepto}</td>
                       <td className={m.tipo === 'egreso' ? 'stock-bajo' : ''}>${Number(m.monto).toFixed(2)}</td>
+                      <td>{m.usuario_nombre || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -199,20 +228,81 @@ export default function Caja() {
         <h3>Historial de cajas</h3>
         <table className="tabla">
           <thead>
-            <tr><th>Apertura</th><th>Cierre</th><th>Monto apertura</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr>
+            <tr>
+              <th>Apertura</th>
+              <th>Abierta por</th>
+              <th>Cierre</th>
+              <th>Cerrada por</th>
+              <th>Monto apertura</th>
+              <th>Esperado</th>
+              <th>Contado</th>
+              <th>Diferencia</th>
+              <th></th>
+            </tr>
           </thead>
           <tbody>
             {historialSesiones.map((s) => (
-              <tr key={s.id}>
-                <td>{new Date(s.fecha_apertura).toLocaleString('es-AR', { hour12: false })}</td>
-                <td>{s.fecha_cierre ? new Date(s.fecha_cierre).toLocaleString('es-AR', { hour12: false }) : '—'}</td>
-                <td>${Number(s.monto_apertura).toFixed(2)}</td>
-                <td>{s.monto_esperado != null ? `$${Number(s.monto_esperado).toFixed(2)}` : '—'}</td>
-                <td>{s.monto_contado != null ? `$${Number(s.monto_contado).toFixed(2)}` : '—'}</td>
-                <td className={s.diferencia && s.diferencia !== 0 ? 'stock-bajo' : ''}>
-                  {s.diferencia != null ? `$${Number(s.diferencia).toFixed(2)}` : '—'}
-                </td>
-              </tr>
+              <React.Fragment key={s.id}>
+                <tr>
+                  <td>{new Date(s.fecha_apertura).toLocaleString('es-AR', { hour12: false })}</td>
+                  <td>{s.usuario_apertura_nombre || '-'}</td>
+                  <td>{s.fecha_cierre ? new Date(s.fecha_cierre).toLocaleString('es-AR', { hour12: false }) : '—'}</td>
+                  <td>{s.usuario_cierre_nombre || '-'}</td>
+                  <td>${Number(s.monto_apertura).toFixed(2)}</td>
+                  <td>{s.monto_esperado != null ? `$${Number(s.monto_esperado).toFixed(2)}` : '—'}</td>
+                  <td>{s.monto_contado != null ? `$${Number(s.monto_contado).toFixed(2)}` : '—'}</td>
+                  <td className={s.diferencia && s.diferencia !== 0 ? 'stock-bajo' : ''}>
+                    {s.diferencia != null ? `$${Number(s.diferencia).toFixed(2)}` : '—'}
+                  </td>
+                  <td>
+                    <button onClick={() => verDetalleSesion(s)}>
+                      {detalleSesion?.id === s.id ? 'Ocultar' : 'Ver detalle'}
+                    </button>
+                  </td>
+                </tr>
+                {detalleSesion?.id === s.id && (
+                  <tr>
+                    <td colSpan={9}>
+                      <p>
+                        Ventas en efectivo: ${detalleSesion.resumen.totalEfectivo.toFixed(2)}
+                        {' '}({detalleSesion.resumen.porMetodo.efectivo ? detalleSesion.resumen.porMetodo.efectivo.cantidad : 0} ventas)
+                        {' '}— Ingresos manuales: ${detalleSesion.resumen.totalIngresos.toFixed(2)}
+                        {' '}— Egresos manuales: ${detalleSesion.resumen.totalEgresos.toFixed(2)}
+                      </p>
+                      {Object.keys(detalleSesion.resumen.porMetodo).length > 0 && (
+                        <p className="nota">
+                          Vendido por método:{' '}
+                          {Object.entries(detalleSesion.resumen.porMetodo)
+                            .map(([metodo, datos]) => `${ETIQUETA_METODO[metodo] || metodo} $${datos.total.toFixed(2)} (${datos.cantidad})`)
+                            .join(' · ')}
+                        </p>
+                      )}
+
+                      <h4 style={{ marginBottom: 4 }}>Movimientos manuales del turno</h4>
+                      {detalleSesion.movimientos.length === 0 ? (
+                        <p className="nota">No hubo retiros, pagos ni ingresos extra en este turno.</p>
+                      ) : (
+                        <table className="tabla">
+                          <thead>
+                            <tr><th>Hora</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Registrado por</th></tr>
+                          </thead>
+                          <tbody>
+                            {detalleSesion.movimientos.map((m) => (
+                              <tr key={m.id}>
+                                <td>{new Date(m.creado_en).toLocaleString('es-AR', { hour12: false })}</td>
+                                <td>{m.tipo === 'egreso' ? 'Egreso' : 'Ingreso'}</td>
+                                <td>{m.concepto}</td>
+                                <td className={m.tipo === 'egreso' ? 'stock-bajo' : ''}>${Number(m.monto).toFixed(2)}</td>
+                                <td>{m.usuario_nombre || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>

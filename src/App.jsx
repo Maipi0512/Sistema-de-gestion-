@@ -21,7 +21,7 @@ export default function App() {
     productos: { label: 'Productos', componente: <Productos usuarioActual={usuarioActual} /> },
     historial: { label: 'Historial de ventas', componente: <Historial usuarioActual={usuarioActual} /> },
     clientes: { label: 'Clientes', componente: <Clientes usuarioActual={usuarioActual} /> },
-    caja: { label: 'Caja', componente: <Caja /> },
+    caja: { label: 'Caja', componente: <Caja usuarioActual={usuarioActual} /> },
     ...(usuarioActual.rol === 'admin'
       ? { usuarios: { label: 'Vendedores', componente: <Usuarios /> } }
       : {}),

@@ -64,16 +64,18 @@ CREATE TABLE producto_colores (
 -- CAJA — control de apertura/cierre de caja por turno o por día
 -- ------------------------------------------------------------
 CREATE TABLE caja_sesiones (
-    id                 SERIAL PRIMARY KEY,
-    fecha_apertura     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    monto_apertura     NUMERIC(12,2) NOT NULL DEFAULT 0,   -- efectivo con el que se abre la caja
-    fecha_cierre       TIMESTAMPTZ,
-    monto_contado      NUMERIC(12,2),                      -- efectivo contado físicamente al cerrar
-    monto_esperado     NUMERIC(12,2),                       -- apertura + ventas en efectivo (calculado al cerrar)
-    diferencia         NUMERIC(12,2),                       -- monto_contado - monto_esperado
-    estado             VARCHAR(10) NOT NULL DEFAULT 'abierta' CHECK (estado IN ('abierta', 'cerrada')),
-    notas              TEXT,
-    creado_en          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                   SERIAL PRIMARY KEY,
+    fecha_apertura       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    monto_apertura       NUMERIC(12,2) NOT NULL DEFAULT 0,   -- efectivo con el que se abre la caja
+    usuario_apertura_id  INTEGER REFERENCES usuarios(id),    -- quién abrió esta caja
+    fecha_cierre         TIMESTAMPTZ,
+    monto_contado        NUMERIC(12,2),                      -- efectivo contado físicamente al cerrar
+    monto_esperado       NUMERIC(12,2),                       -- apertura + ventas en efectivo (calculado al cerrar)
+    diferencia           NUMERIC(12,2),                       -- monto_contado - monto_esperado
+    usuario_cierre_id    INTEGER REFERENCES usuarios(id),    -- quién la cerró
+    estado               VARCHAR(10) NOT NULL DEFAULT 'abierta' CHECK (estado IN ('abierta', 'cerrada')),
+    notas                TEXT,
+    creado_en            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Solo puede haber una caja abierta a la vez
@@ -91,6 +93,7 @@ CREATE TABLE movimientos_caja (
     tipo           VARCHAR(10) NOT NULL CHECK (tipo IN ('ingreso', 'egreso')),
     monto          NUMERIC(12,2) NOT NULL CHECK (monto > 0),
     concepto       VARCHAR(200) NOT NULL,  -- ej: "Retiro", "Pago de luz", "Pago a proveedor"
+    usuario_id     INTEGER REFERENCES usuarios(id), -- quién registró el movimiento
     creado_en      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

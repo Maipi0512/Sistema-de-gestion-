@@ -90,11 +90,11 @@ ipcMain.handle('clientes:registrarPago', async (_e, clienteId, monto, metodoPago
   db.registrarPagoCuentaCorriente(clienteId, monto, metodoPago, notas, usuarioId));
 
 ipcMain.handle('caja:actual', async () => db.cajaActual());
-ipcMain.handle('caja:abrir', async (_e, montoApertura, notas) => db.abrirCaja(montoApertura, notas));
-ipcMain.handle('caja:cerrar', async (_e, sesionId, montoContado, notas) => db.cerrarCaja(sesionId, montoContado, notas));
+ipcMain.handle('caja:abrir', async (_e, montoApertura, notas, usuarioId) => db.abrirCaja(montoApertura, notas, usuarioId));
+ipcMain.handle('caja:cerrar', async (_e, sesionId, montoContado, notas, usuarioId) => db.cerrarCaja(sesionId, montoContado, notas, usuarioId));
 ipcMain.handle('caja:resumen', async (_e, sesionId) => db.resumenCaja(sesionId));
 ipcMain.handle('caja:listarSesiones', async () => db.listarSesionesCaja());
-ipcMain.handle('caja:registrarMovimiento', async (_e, sesionId, tipo, monto, concepto) => db.registrarMovimientoCaja(sesionId, tipo, monto, concepto));
+ipcMain.handle('caja:registrarMovimiento', async (_e, sesionId, tipo, monto, concepto, usuarioId) => db.registrarMovimientoCaja(sesionId, tipo, monto, concepto, usuarioId));
 ipcMain.handle('caja:listarMovimientos', async (_e, sesionId) => db.listarMovimientosCaja(sesionId));
 
 ipcMain.handle('dashboard:stockBajo', async () => db.stockBajo());
