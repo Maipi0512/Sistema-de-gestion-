@@ -46,6 +46,14 @@ export default function Historial({ usuarioActual }) {
   const [anulando, setAnulando] = useState(false);
   const [errorAnulacion, setErrorAnulacion] = useState('');
 
+  // Exportar a Excel pide su propio rango de fechas (en vez de mandar
+  // directo lo que haya en el filtro de la lista, que puede estar vacío),
+  // así siempre queda claro qué período se está exportando.
+  const [exportando, setExportando] = useState(false);
+  const [exportDesde, setExportDesde] = useState('');
+  const [exportHasta, setExportHasta] = useState('');
+  const [errorExport, setErrorExport] = useState('');
+
   const cargar = () => {
     window.api.ventas.listar({ desde: desde || null, hasta: hasta || null }).then(setVentas);
   };
@@ -64,6 +72,34 @@ export default function Historial({ usuarioActual }) {
     setConfirmandoAnulacion(false);
     setMotivoAnulacion('');
     setErrorAnulacion('');
+  };
+
+  const empezarExportacion = () => {
+    // Arranca con lo que ya haya en el filtro de la lista, para no hacer
+    // cargar los mismos datos dos veces si ya se estaba mirando ese rango.
+    setExportDesde(desde);
+    setExportHasta(hasta);
+    setErrorExport('');
+    setExportando(true);
+  };
+
+  const salirDeExportacion = () => {
+    setExportando(false);
+    setErrorExport('');
+  };
+
+  const confirmarExportacion = async () => {
+    if (!exportDesde || !exportHasta) {
+      setErrorExport('Elegí desde y hasta qué fecha exportar.');
+      return;
+    }
+    if (exportDesde > exportHasta) {
+      setErrorExport('La fecha "desde" no puede ser posterior a "hasta".');
+      return;
+    }
+    setErrorExport('');
+    await window.api.export.ventas({ desde: exportDesde, hasta: exportHasta });
+    salirDeExportacion();
   };
 
   // Devuelve el stock que había descontado la venta y la marca como anulada.
@@ -141,10 +177,24 @@ export default function Historial({ usuarioActual }) {
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </label>
         <button onClick={cargar}>Filtrar</button>
-        <button onClick={() => window.api.export.ventas({ desde: desde || null, hasta: hasta || null })}>
-          Exportar a Excel
-        </button>
+        {!exportando && <button onClick={empezarExportacion}>Exportar a Excel</button>}
       </div>
+
+      {exportando && (
+        <div className="barra-acciones">
+          <label>
+            Desde
+            <input type="date" value={exportDesde} onChange={(e) => setExportDesde(e.target.value)} />
+          </label>
+          <label>
+            Hasta
+            <input type="date" value={exportHasta} onChange={(e) => setExportHasta(e.target.value)} />
+          </label>
+          <button onClick={confirmarExportacion}>Descargar Excel</button>
+          <button onClick={salirDeExportacion}>Cancelar</button>
+          {errorExport && <p className="error">{errorExport}</p>}
+        </div>
+      )}
 
       <table className="tabla">
         <thead>

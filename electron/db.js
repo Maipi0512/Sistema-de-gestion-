@@ -458,6 +458,13 @@ async function crearVenta(items, pagos, usuarioId = null, clienteId = null) {
 // `pagos` trae el desglose por método (útil cuando metodo_pago = 'mixto').
 async function listarVentas(filtro = {}) {
   const { desde, hasta } = filtro;
+  // El tope de 200 es solo para la vista "sin filtro" (últimas ventas),
+  // para no traer el historial entero de una. Si el usuario pidió un rango
+  // de fechas puntual, se respeta completo: si no, filtrar por un mes con
+  // más de 200 ventas cortaba el resultado a la mitad (ver bug reportado:
+  // "todo agosto" solo traía desde el día 18, porque esas eran las 200
+  // ventas más recientes y las anteriores quedaban afuera del LIMIT).
+  const sinFiltro = !desde && !hasta;
   const { rows } = await pool.query(
     `SELECT v.*, u.nombre AS vendedor_nombre, c.nombre AS cliente_nombre,
        (SELECT string_agg(vd.descripcion, ' | ' ORDER BY vd.id)
@@ -473,9 +480,9 @@ async function listarVentas(filtro = {}) {
      LEFT JOIN clientes c ON c.id = v.cliente_id
      WHERE v.anulada = FALSE
        AND ($1::timestamp IS NULL OR v.fecha >= $1)
-       AND ($2::timestamp IS NULL OR v.fecha <= $2)
-     ORDER BY v.fecha DESC
-     LIMIT 200`,
+       AND ($2::date IS NULL OR v.fecha < $2::date + INTERVAL '1 day')
+     ORDER BY v.fecha ${sinFiltro ? 'DESC' : 'ASC'}
+     ${sinFiltro ? 'LIMIT 200' : ''}`,
     [desde || null, hasta || null]
   );
   return rows;
@@ -486,6 +493,7 @@ async function listarVentas(filtro = {}) {
 // ventas, que además del resumen por venta necesita ver qué se vendió.
 async function listarDetalleVentas(filtro = {}) {
   const { desde, hasta } = filtro;
+  const sinFiltro = !desde && !hasta;
   const { rows } = await pool.query(
     `SELECT v.id AS venta_id, v.fecha, u.nombre AS vendedor_nombre, c.nombre AS cliente_nombre,
        p.nombre AS producto_nombre, vd.color, vd.cantidad, vd.unidades_por_paquete,
@@ -497,8 +505,8 @@ async function listarDetalleVentas(filtro = {}) {
      LEFT JOIN clientes c ON c.id = v.cliente_id
      WHERE v.anulada = FALSE
        AND ($1::timestamp IS NULL OR v.fecha >= $1)
-       AND ($2::timestamp IS NULL OR v.fecha <= $2)
-     ORDER BY v.fecha DESC, v.id, vd.id`,
+       AND ($2::date IS NULL OR v.fecha < $2::date + INTERVAL '1 day')
+     ORDER BY v.fecha ${sinFiltro ? 'DESC' : 'ASC'}, v.id, vd.id`,
     [desde || null, hasta || null]
   );
   return rows;
