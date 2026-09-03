@@ -23,85 +23,25 @@ function formatearPagos(venta) {
     .join(' + ');
 }
 
-// "Tela roja (Rojo) x2 = $500.00 [Telas]" — una línea por producto vendido,
-// con la categoría del producto al lado.
-function formatearItem(it) {
-  const color = it.color ? ` (${it.color})` : '';
-  const cantidad = it.unidades_por_paquete
-    ? `${Number(it.cantidad)} paquete(s) x ${Number(it.unidades_por_paquete)}`
-    : `x${Number(it.cantidad)}`;
-  const categoria = it.producto_categoria ? ` [${it.producto_categoria}]` : '';
-  return `${it.producto_nombre}${color} ${cantidad} = $${Number(it.subtotal).toFixed(2)}${categoria}`;
-}
-
-// Agrupa el detalle en un texto por venta (una celda), un producto por
-// renglón dentro de esa misma celda:
-//   Tela roja x2 = $500.00
-//   Hilo blanco x1 = $100.00
-function agruparDetallePorVenta(itemsVendidos) {
-  const porVenta = {};
-  itemsVendidos.forEach((it) => {
-    if (!porVenta[it.venta_id]) porVenta[it.venta_id] = [];
-    porVenta[it.venta_id].push(formatearItem(it));
-  });
-  const resultado = {};
-  Object.entries(porVenta).forEach(([ventaId, items]) => {
-    resultado[ventaId] = items.join('\n');
-  });
-  return resultado;
-}
-
 async function exportarVentasExcel(filtro = {}) {
   const [ventas, itemsVendidos] = await Promise.all([
     db.listarVentas(filtro),
     db.listarDetalleVentas(filtro),
   ]);
 
-  const detallePorVenta = agruparDetallePorVenta(itemsVendidos);
+  // Datos de la venta (total, método de pago) para completarlos en cada
+  // renglón de producto, buscando por venta_id.
+  const ventaPorId = {};
+  ventas.forEach((v) => { ventaPorId[v.id] = v; });
 
   const workbook = new ExcelJS.Workbook();
   const hoja = workbook.addWorksheet('Ventas');
 
+  // Un renglón por producto vendido (no por venta): así al filtrar por
+  // categoría (o cualquier columna) con el autofiltro de Excel, cada fila
+  // filtrada es un producto suelto y no arrastra a los demás productos de
+  // la misma venta.
   hoja.columns = [
-    { header: 'ID', key: 'id', width: 8 },
-    { header: 'Fecha', key: 'fecha', width: 20 },
-    { header: 'Vendedor', key: 'vendedor', width: 20 },
-    { header: 'Detalle (productos vendidos)', key: 'detalleProductos', width: 55 },
-    { header: 'Descripción', key: 'descripciones', width: 35 },
-    { header: 'Total', key: 'total', width: 14 },
-    { header: 'Método de pago', key: 'metodo_pago', width: 30 },
-  ];
-  hoja.getRow(1).font = { bold: true };
-  // Wrap para que se vea un producto por renglón dentro de la misma celda,
-  // en vez de una sola línea larga.
-  hoja.getColumn('detalleProductos').alignment = { wrapText: true, vertical: 'top' };
-
-  ventas.forEach((v) => {
-    const detalle = detallePorVenta[v.id] || '';
-    const fila = hoja.addRow({
-      id: v.id,
-      fecha: new Date(v.fecha).toLocaleString('es-AR'),
-      vendedor: v.vendedor_nombre || '-',
-      detalleProductos: detalle,
-      descripciones: v.descripciones || '',
-      total: Number(v.total),
-      metodo_pago: formatearPagos(v),
-    });
-    // Alto de fila proporcional a la cantidad de productos, así se ven
-    // todos los renglones sin tener que agrandarla a mano.
-    const cantidadLineas = detalle ? detalle.split('\n').length : 1;
-    fila.height = Math.max(15, cantidadLineas * 14);
-  });
-
-  const totalGeneral = ventas.reduce((acc, v) => acc + Number(v.total), 0);
-  hoja.addRow({});
-  const filaTotal = hoja.addRow({ vendedor: 'TOTAL', total: totalGeneral });
-  filaTotal.font = { bold: true };
-
-  // Segunda hoja: un renglón por producto vendido (no por venta), para ver
-  // el detalle de qué se vendió y no solo el total de cada venta.
-  const hojaDetalle = workbook.addWorksheet('Detalle de ventas');
-  hojaDetalle.columns = [
     { header: 'Venta #', key: 'venta_id', width: 10 },
     { header: 'Fecha', key: 'fecha', width: 20 },
     { header: 'Vendedor', key: 'vendedor', width: 20 },
@@ -112,11 +52,15 @@ async function exportarVentasExcel(filtro = {}) {
     { header: 'Precio unit.', key: 'precio_unitario', width: 14 },
     { header: 'Subtotal', key: 'subtotal', width: 14 },
     { header: 'Descripción', key: 'descripcion', width: 30 },
+    { header: 'Total venta', key: 'total_venta', width: 14 },
+    { header: 'Método de pago', key: 'metodo_pago', width: 30 },
   ];
-  hojaDetalle.getRow(1).font = { bold: true };
+  hoja.getRow(1).font = { bold: true };
+  hoja.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: hoja.columns.length } };
 
   itemsVendidos.forEach((it) => {
-    hojaDetalle.addRow({
+    const venta = ventaPorId[it.venta_id];
+    hoja.addRow({
       venta_id: it.venta_id,
       fecha: new Date(it.fecha).toLocaleString('es-AR'),
       vendedor: it.vendedor_nombre || '-',
@@ -129,8 +73,17 @@ async function exportarVentasExcel(filtro = {}) {
       precio_unitario: Number(it.precio_unitario),
       subtotal: Number(it.subtotal),
       descripcion: it.descripcion || '',
+      total_venta: venta ? Number(venta.total) : '',
+      metodo_pago: venta ? formatearPagos(venta) : '',
     });
   });
+
+  // Suma por producto (Subtotal), no por venta, para no contar el total
+  // de una misma venta varias veces cuando tiene varios productos.
+  const totalGeneral = itemsVendidos.reduce((acc, it) => acc + Number(it.subtotal), 0);
+  hoja.addRow({});
+  const filaTotal = hoja.addRow({ vendedor: 'TOTAL', subtotal: totalGeneral });
+  filaTotal.font = { bold: true };
 
   const { filePath, canceled } = await dialog.showSaveDialog({
     title: 'Guardar informe de ventas',
