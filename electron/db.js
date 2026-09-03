@@ -496,7 +496,7 @@ async function listarDetalleVentas(filtro = {}) {
   const sinFiltro = !desde && !hasta;
   const { rows } = await pool.query(
     `SELECT v.id AS venta_id, v.fecha, u.nombre AS vendedor_nombre, c.nombre AS cliente_nombre,
-       p.nombre AS producto_nombre, vd.color, vd.cantidad, vd.unidades_por_paquete,
+       p.nombre AS producto_nombre, p.categoria AS producto_categoria, vd.color, vd.cantidad, vd.unidades_por_paquete,
        vd.precio_unitario, vd.subtotal, vd.descripcion
      FROM venta_detalle vd
      JOIN ventas v ON v.id = vd.venta_id
