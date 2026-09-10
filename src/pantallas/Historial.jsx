@@ -10,6 +10,19 @@ const ETIQUETA_METODO = {
   cuenta_corriente: 'Cuenta corriente',
 };
 
+// Métodos que se pueden corregir a mano. 'mixto' no es un método real
+// (es lo que se muestra cuando hay varios venta_pagos) y 'cuenta_corriente'
+// mueve el saldo del cliente, así que ese caso se corrige anulando la
+// venta y volviéndola a cargar — coincide con METODOS_PAGO_EDITABLES en
+// electron/db.js.
+const METODOS_PAGO_EDITABLES = ['efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago'];
+
+// Se puede corregir el método de cada pata del pago, esté dividida en
+// varios métodos o no. Lo único que no se puede tocar acá es cuenta
+// corriente, porque cambiarlo movería la deuda del cliente.
+const puedeEditarMetodoPago = (venta) =>
+  venta?.pagos?.length > 0 && venta.pagos.every((p) => p.metodo_pago !== 'cuenta_corriente');
+
 // Arma un texto tipo "Efectivo $500 + Transferencia $200" a partir del
 // desglose de venta_pagos. Si la venta se pagó con un solo método, alcanza
 // con mostrar la etiqueta simple.
@@ -46,6 +59,15 @@ export default function Historial({ usuarioActual }) {
   const [anulando, setAnulando] = useState(false);
   const [errorAnulacion, setErrorAnulacion] = useState('');
 
+  // Corrección del método de pago (ej. cargaron "efectivo" y era
+  // "transferencia"). Cualquier vendedora puede arreglarlo, no hace
+  // falta ser admin — a diferencia de anular, esto no toca stock ni caja
+  // cerrada, solo corrige el dato.
+  const [editandoMetodo, setEditandoMetodo] = useState(false);
+  const [metodoBorrador, setMetodoBorrador] = useState({}); // { [id del pago]: metodo_pago }
+  const [guardandoMetodo, setGuardandoMetodo] = useState(false);
+  const [errorMetodo, setErrorMetodo] = useState('');
+
   // Exportar a Excel pide su propio rango de fechas (en vez de mandar
   // directo lo que haya en el filtro de la lista, que puede estar vacío),
   // así siempre queda claro qué período se está exportando.
@@ -72,6 +94,41 @@ export default function Historial({ usuarioActual }) {
     setConfirmandoAnulacion(false);
     setMotivoAnulacion('');
     setErrorAnulacion('');
+  };
+
+  const salirDeEdicionMetodo = () => {
+    setEditandoMetodo(false);
+    setErrorMetodo('');
+  };
+
+  const empezarEdicionMetodo = () => {
+    const inicial = {};
+    detalleAbierto.pagos.forEach((p) => {
+      inicial[p.id] = p.metodo_pago;
+    });
+    setMetodoBorrador(inicial);
+    setErrorMetodo('');
+    setEditandoMetodo(true);
+  };
+
+  const cambiarMetodoBorrador = (pagoId, metodo) => {
+    setMetodoBorrador((prev) => ({ ...prev, [pagoId]: metodo }));
+  };
+
+  const guardarMetodoPago = async () => {
+    setErrorMetodo('');
+    setGuardandoMetodo(true);
+    try {
+      const pagos = detalleAbierto.pagos.map((p) => ({ id: p.id, metodo_pago: metodoBorrador[p.id] }));
+      const actualizada = await window.api.ventas.actualizarMetodoPago(detalleAbierto.id, pagos);
+      setDetalleAbierto(actualizada);
+      salirDeEdicionMetodo();
+      cargar(); // refresca la columna Método de pago de la lista
+    } catch (err) {
+      setErrorMetodo(err.message);
+    } finally {
+      setGuardandoMetodo(false);
+    }
   };
 
   const empezarExportacion = () => {
@@ -111,6 +168,7 @@ export default function Historial({ usuarioActual }) {
       setDetalleAbierto(null);
       salirDeEdicion();
       salirDeAnulacion();
+      salirDeEdicionMetodo();
       cargar();
     } catch (err) {
       setErrorAnulacion(err.message);
@@ -122,6 +180,7 @@ export default function Historial({ usuarioActual }) {
   const verDetalle = async (venta) => {
     salirDeEdicion();
     salirDeAnulacion();
+    salirDeEdicionMetodo();
     if (detalleAbierto?.id === venta.id) {
       setDetalleAbierto(null);
       return;
@@ -240,6 +299,9 @@ export default function Historial({ usuarioActual }) {
                       ) : (
                         <button onClick={empezarEdicion}>Editar descripciones</button>
                       )}
+                      {!editandoMetodo && puedeEditarMetodoPago(detalleAbierto) && (
+                        <button onClick={empezarEdicionMetodo}>Corregir método de pago</button>
+                      )}
                       {esAdmin && !confirmandoAnulacion && (
                         <button onClick={() => setConfirmandoAnulacion(true)}>Anular venta</button>
                       )}
@@ -275,6 +337,34 @@ export default function Historial({ usuarioActual }) {
                     )}
 
                     <p><strong>Forma de pago:</strong> {formatearPagos(detalleAbierto)}</p>
+                    {editandoMetodo && (
+                      <div className="barra-acciones">
+                        {detalleAbierto.pagos.map((p) => (
+                          <label key={p.id}>
+                            ${Number(p.monto).toFixed(2)} pagado con
+                            <select
+                              value={metodoBorrador[p.id] ?? p.metodo_pago}
+                              onChange={(e) => cambiarMetodoBorrador(p.id, e.target.value)}
+                            >
+                              {METODOS_PAGO_EDITABLES.map((m) => (
+                                <option key={m} value={m}>{ETIQUETA_METODO[m]}</option>
+                              ))}
+                            </select>
+                          </label>
+                        ))}
+                        <button onClick={guardarMetodoPago} disabled={guardandoMetodo}>
+                          {guardandoMetodo ? 'Guardando...' : 'Guardar'}
+                        </button>
+                        <button onClick={salirDeEdicionMetodo} disabled={guardandoMetodo}>Cancelar</button>
+                        {errorMetodo && <p className="error">{errorMetodo}</p>}
+                      </div>
+                    )}
+                    {!puedeEditarMetodoPago(detalleAbierto) && (
+                      <p style={{ fontSize: 13, opacity: 0.75 }}>
+                        Esta venta tiene un pago por cuenta corriente: para corregir la forma de pago hay que
+                        anularla y volver a cargarla.
+                      </p>
+                    )}
                     {detalleAbierto.cliente_nombre && (
                       <p><strong>Cliente:</strong> {detalleAbierto.cliente_nombre}</p>
                     )}

@@ -567,6 +567,77 @@ async function actualizarDescripcionesVenta(ventaId, descripciones) {
   return obtenerDetalleVenta(ventaId);
 }
 
+// Métodos que se pueden asignar desde la corrección manual. Se excluye
+// 'mixto' (no es un método real, es lo que se muestra cuando hay varios
+// venta_pagos) y 'cuenta_corriente' (cambiar desde/hacia ahí mueve el
+// saldo del cliente, así que ese caso se maneja anulando y recargando).
+const METODOS_PAGO_EDITABLES = ['efectivo', 'debito', 'credito', 'transferencia', 'mercado_pago'];
+
+// Corrige el método de pago de una venta cuando se cargó mal (ej.
+// tildaron "efectivo" siendo que fue una transferencia). `pagos` trae
+// un { id, metodo_pago } por cada venta_pagos existente — funciona
+// tanto para ventas de un solo método como para las divididas entre
+// varios (mixto), porque cada "pata" del pago se corrige por separado.
+// Los montos no se tocan, solo a qué método corresponde cada uno.
+// Si alguna pata es cuenta corriente no se puede editar acá (mueve el
+// saldo del cliente): hay que anular la venta y volver a cargarla.
+async function actualizarMetodoPagoVenta(ventaId, pagos) {
+  if (!Array.isArray(pagos) || pagos.length === 0) {
+    throw new Error('Faltan los métodos de pago a guardar');
+  }
+  for (const p of pagos) {
+    if (!METODOS_PAGO_EDITABLES.includes(p.metodo_pago)) {
+      throw new Error('Método de pago inválido');
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: ventaRows } = await client.query(
+      'SELECT anulada FROM ventas WHERE id = $1 FOR UPDATE',
+      [ventaId]
+    );
+    if (ventaRows.length === 0) throw new Error('Venta no encontrada');
+    if (ventaRows[0].anulada) throw new Error('No se puede editar una venta anulada');
+
+    const { rows: pagosActuales } = await client.query(
+      'SELECT id, metodo_pago FROM venta_pagos WHERE venta_id = $1 FOR UPDATE',
+      [ventaId]
+    );
+    if (pagosActuales.length === 0) throw new Error('La venta no tiene pagos registrados');
+    if (pagosActuales.some((p) => p.metodo_pago === 'cuenta_corriente')) {
+      throw new Error('El pago por cuenta corriente no se puede cambiar acá: anulá la venta y volvé a cargarla');
+    }
+    const idsCoinciden =
+      pagos.length === pagosActuales.length &&
+      pagos.every((p) => pagosActuales.some((pa) => pa.id === p.id));
+    if (!idsCoinciden) {
+      throw new Error('Los pagos no coinciden con los de la venta');
+    }
+
+    for (const p of pagos) {
+      await client.query('UPDATE venta_pagos SET metodo_pago = $1 WHERE id = $2 AND venta_id = $3', [p.metodo_pago, p.id, ventaId]);
+    }
+
+    // El resumen de la venta (columna ventas.metodo_pago) es el método
+    // único si todas las patas quedaron iguales, o 'mixto' si no.
+    const metodosUnicos = [...new Set(pagos.map((p) => p.metodo_pago))];
+    const metodoResumen = metodosUnicos.length === 1 ? metodosUnicos[0] : 'mixto';
+    await client.query('UPDATE ventas SET metodo_pago = $1 WHERE id = $2', [metodoResumen, ventaId]);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  return obtenerDetalleVenta(ventaId);
+}
+
 // Anula una venta: devuelve el stock que había descontado (uno por uno,
 // respetando color si corresponde) y la marca como anulada, para que deje
 // de contar en el historial y en la caja pero sin perder el registro.
@@ -783,6 +854,7 @@ module.exports = {
   listarDetalleVentas,
   obtenerDetalleVenta,
   actualizarDescripcionesVenta,
+  actualizarMetodoPagoVenta,
   anularVenta,
   stockBajo,
   cajaActual,
