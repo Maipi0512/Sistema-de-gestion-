@@ -136,4 +136,58 @@ async function exportarProductosExcel() {
   return { guardado: true, filePath };
 }
 
-module.exports = { exportarVentasExcel, exportarProductosExcel };
+// Bolsita (retiro Mer) tal como se ve en la pantalla: un renglón por
+// movimiento, con ingreso o egreso en su columna y el saldo acumulado.
+async function exportarPlanillaExcel(usuarioId) {
+  const movimientos = await db.listarPlanilla(usuarioId);
+
+  const workbook = new ExcelJS.Workbook();
+  const hoja = workbook.addWorksheet('Bolsita');
+
+  hoja.columns = [
+    { header: 'Fecha', key: 'fecha', width: 20 },
+    { header: 'Concepto', key: 'concepto', width: 30 },
+    { header: 'Origen', key: 'origen', width: 16 },
+    { header: 'Ingreso', key: 'ingreso', width: 14 },
+    { header: 'Egreso', key: 'egreso', width: 14 },
+    { header: 'Saldo', key: 'saldo', width: 14 },
+    { header: 'Registrado por', key: 'usuario', width: 20 },
+  ];
+  hoja.getRow(1).font = { bold: true };
+  hoja.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: hoja.columns.length } };
+
+  movimientos.forEach((m) => {
+    hoja.addRow({
+      fecha: new Date(m.creado_en).toLocaleString('es-AR'),
+      concepto: m.concepto,
+      origen: m.movimiento_caja_id ? 'Retiro de caja' : 'Carga manual',
+      ingreso: m.tipo === 'ingreso' ? Number(m.monto) : null,
+      egreso: m.tipo === 'egreso' ? Number(m.monto) : null,
+      saldo: Number(m.saldo),
+      usuario: m.usuario_nombre || '-',
+    });
+  });
+
+  const totalIngresos = movimientos.filter((m) => m.tipo === 'ingreso').reduce((acc, m) => acc + Number(m.monto), 0);
+  const totalEgresos = movimientos.filter((m) => m.tipo === 'egreso').reduce((acc, m) => acc + Number(m.monto), 0);
+  hoja.addRow({});
+  const filaTotal = hoja.addRow({
+    concepto: 'TOTAL',
+    ingreso: totalIngresos,
+    egreso: totalEgresos,
+    saldo: totalIngresos - totalEgresos,
+  });
+  filaTotal.font = { bold: true };
+
+  const { filePath, canceled } = await dialog.showSaveDialog({
+    title: 'Guardar planilla de la bolsita',
+    defaultPath: `bolsita_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+  });
+  if (canceled || !filePath) return { guardado: false };
+
+  await workbook.xlsx.writeFile(filePath);
+  return { guardado: true, filePath };
+}
+
+module.exports = { exportarVentasExcel, exportarProductosExcel, exportarPlanillaExcel };

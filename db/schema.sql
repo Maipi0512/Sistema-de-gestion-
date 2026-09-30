@@ -100,6 +100,25 @@ CREATE TABLE movimientos_caja (
 CREATE INDEX idx_movimientos_caja_sesion ON movimientos_caja(caja_sesion_id);
 
 -- ------------------------------------------------------------
+-- BOLSITA (retiro Mer) — solo la ven los administradores
+-- La plata que se saca de la caja con "a la bolsita" entra
+-- acá como ingreso (movimiento_caja_id apunta al retiro); lo que se
+-- gasta de esa plata se carga como egreso. El saldo es ingresos
+-- menos egresos, no se guarda como columna aparte.
+-- ------------------------------------------------------------
+CREATE TABLE planilla_movimientos (
+    id                 SERIAL PRIMARY KEY,
+    tipo               VARCHAR(10) NOT NULL CHECK (tipo IN ('ingreso', 'egreso')),
+    monto              NUMERIC(12,2) NOT NULL CHECK (monto > 0),
+    concepto           VARCHAR(200) NOT NULL,  -- ej: "Retiro Mer", "Bolsita", "Pago a proveedor"
+    movimiento_caja_id INTEGER UNIQUE REFERENCES movimientos_caja(id), -- si vino de un retiro de caja
+    usuario_id         INTEGER REFERENCES usuarios(id), -- quién registró el movimiento
+    creado_en          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_planilla_movimientos_fecha ON planilla_movimientos(creado_en);
+
+-- ------------------------------------------------------------
 -- MOVIMIENTOS DE STOCK
 -- Fuente de verdad de toda entrada/salida: ventas, ajustes
 -- manuales (rotura, pérdida, conteo físico, reposición).
@@ -270,3 +289,4 @@ ALTER TABLE venta_pagos                  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE venta_detalle                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clientes                     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cuenta_corriente_movimientos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE planilla_movimientos         ENABLE ROW LEVEL SECURITY;

@@ -46,9 +46,14 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('caja:cerrar', sesionId, montoContado, notas, usuarioId),
     resumen: (sesionId) => ipcRenderer.invoke('caja:resumen', sesionId),
     listarSesiones: () => ipcRenderer.invoke('caja:listarSesiones'),
-    registrarMovimiento: (sesionId, tipo, monto, concepto, usuarioId) =>
-      ipcRenderer.invoke('caja:registrarMovimiento', sesionId, tipo, monto, concepto, usuarioId),
+    registrarMovimiento: (sesionId, tipo, monto, concepto, usuarioId, aPlanilla) =>
+      ipcRenderer.invoke('caja:registrarMovimiento', sesionId, tipo, monto, concepto, usuarioId, aPlanilla),
     listarMovimientos: (sesionId) => ipcRenderer.invoke('caja:listarMovimientos', sesionId),
+  },
+  planilla: {
+    listar: (usuarioId) => ipcRenderer.invoke('planilla:listar', usuarioId),
+    registrarMovimiento: (tipo, monto, concepto, usuarioId) =>
+      ipcRenderer.invoke('planilla:registrarMovimiento', tipo, monto, concepto, usuarioId),
   },
   dashboard: {
     stockBajo: () => ipcRenderer.invoke('dashboard:stockBajo'),
@@ -56,5 +61,6 @@ contextBridge.exposeInMainWorld('api', {
   export: {
     ventas: (filtro) => ipcRenderer.invoke('export:ventas', filtro),
     productos: () => ipcRenderer.invoke('export:productos'),
+    planilla: (usuarioId) => ipcRenderer.invoke('export:planilla', usuarioId),
   },
 });

@@ -95,10 +95,14 @@ ipcMain.handle('caja:abrir', async (_e, montoApertura, notas, usuarioId) => db.a
 ipcMain.handle('caja:cerrar', async (_e, sesionId, montoContado, notas, usuarioId) => db.cerrarCaja(sesionId, montoContado, notas, usuarioId));
 ipcMain.handle('caja:resumen', async (_e, sesionId) => db.resumenCaja(sesionId));
 ipcMain.handle('caja:listarSesiones', async () => db.listarSesionesCaja());
-ipcMain.handle('caja:registrarMovimiento', async (_e, sesionId, tipo, monto, concepto, usuarioId) => db.registrarMovimientoCaja(sesionId, tipo, monto, concepto, usuarioId));
+ipcMain.handle('caja:registrarMovimiento', async (_e, sesionId, tipo, monto, concepto, usuarioId, aPlanilla) => db.registrarMovimientoCaja(sesionId, tipo, monto, concepto, usuarioId, aPlanilla));
 ipcMain.handle('caja:listarMovimientos', async (_e, sesionId) => db.listarMovimientosCaja(sesionId));
+
+ipcMain.handle('planilla:listar', async (_e, usuarioId) => db.listarPlanilla(usuarioId));
+ipcMain.handle('planilla:registrarMovimiento', async (_e, tipo, monto, concepto, usuarioId) => db.registrarMovimientoPlanilla(tipo, monto, concepto, usuarioId));
 
 ipcMain.handle('dashboard:stockBajo', async () => db.stockBajo());
 
 ipcMain.handle('export:ventas', async (_e, filtro) => exportExcel.exportarVentasExcel(filtro));
 ipcMain.handle('export:productos', async () => exportExcel.exportarProductosExcel());
+ipcMain.handle('export:planilla', async (_e, usuarioId) => exportExcel.exportarPlanillaExcel(usuarioId));

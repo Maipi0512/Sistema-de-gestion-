@@ -290,22 +290,46 @@ async function resumenCaja(sesionId) {
 
 // Registra un retiro, pago de servicio, o ingreso extra de efectivo
 // que no es una venta (ej: "Pago de luz", "Retiro para el banco").
-async function registrarMovimientoCaja(sesionId, tipo, monto, concepto, usuarioId = null) {
+// Si es un egreso con aPlanilla = true (ej: "Retiro Mer", "Bolsita"),
+// esa plata además entra como ingreso en la bolsita; las dos filas se
+// guardan juntas o ninguna. Solo un administrador puede mandar plata
+// a la bolsita.
+async function registrarMovimientoCaja(sesionId, tipo, monto, concepto, usuarioId = null, aPlanilla = false) {
   if (!['ingreso', 'egreso'].includes(tipo)) throw new Error('Tipo de movimiento inválido');
   if (!concepto || !concepto.trim()) throw new Error('El movimiento necesita un concepto');
   if (!monto || monto <= 0) throw new Error('El monto debe ser mayor a cero');
+  if (aPlanilla && tipo !== 'egreso') throw new Error('Solo un egreso de la caja puede pasar a la bolsita');
+  if (aPlanilla) await exigirAdmin(usuarioId, 'Solo un administrador puede pasar plata a la bolsita');
 
-  const { rows } = await pool.query(
-    `INSERT INTO movimientos_caja (caja_sesion_id, tipo, monto, concepto, usuario_id)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [sesionId, tipo, monto, concepto.trim(), usuarioId]
-  );
-  return rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `INSERT INTO movimientos_caja (caja_sesion_id, tipo, monto, concepto, usuario_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [sesionId, tipo, monto, concepto.trim(), usuarioId]
+    );
+    if (aPlanilla) {
+      await client.query(
+        `INSERT INTO planilla_movimientos (tipo, monto, concepto, movimiento_caja_id, usuario_id)
+         VALUES ('ingreso', $1, $2, $3, $4)`,
+        [monto, concepto.trim(), rows[0].id, usuarioId]
+      );
+    }
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function listarMovimientosCaja(sesionId) {
   const { rows } = await pool.query(
-    `SELECT mc.*, u.nombre AS usuario_nombre
+    `SELECT mc.*, u.nombre AS usuario_nombre,
+       EXISTS (SELECT 1 FROM planilla_movimientos pm WHERE pm.movimiento_caja_id = mc.id) AS en_planilla
      FROM movimientos_caja mc
      LEFT JOIN usuarios u ON u.id = mc.usuario_id
      WHERE mc.caja_sesion_id = $1
@@ -748,6 +772,47 @@ async function stockBajo() {
 }
 
 // ------------------------------------------------------------
+// BOLSITA (retiro Mer)
+// Los ingresos llegan desde Caja (egresos marcados "a la bolsita");
+// los egresos son lo que se gasta de esa plata y se cargan a mano
+// desde la pantalla Bolsita. Solo la ven los administradores.
+// ------------------------------------------------------------
+
+async function exigirAdmin(usuarioId, mensaje) {
+  const { rows } = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [usuarioId]);
+  if (rows.length === 0 || rows[0].rol !== 'admin') throw new Error(mensaje);
+}
+
+// Movimientos de la planilla en orden cronológico, cada uno con el
+// saldo acumulado hasta ese renglón (como una planilla en papel).
+async function listarPlanilla(usuarioId) {
+  await exigirAdmin(usuarioId, 'Solo un administrador puede ver la bolsita');
+  const { rows } = await pool.query(
+    `SELECT pm.*, u.nombre AS usuario_nombre,
+       SUM(CASE WHEN pm.tipo = 'ingreso' THEN pm.monto ELSE -pm.monto END)
+         OVER (ORDER BY pm.creado_en, pm.id) AS saldo
+     FROM planilla_movimientos pm
+     LEFT JOIN usuarios u ON u.id = pm.usuario_id
+     ORDER BY pm.creado_en, pm.id`
+  );
+  return rows;
+}
+
+async function registrarMovimientoPlanilla(tipo, monto, concepto, usuarioId = null) {
+  await exigirAdmin(usuarioId, 'Solo un administrador puede cargar movimientos en la bolsita');
+  if (!['ingreso', 'egreso'].includes(tipo)) throw new Error('Tipo de movimiento inválido');
+  if (!concepto || !concepto.trim()) throw new Error('El movimiento necesita un concepto');
+  if (!monto || monto <= 0) throw new Error('El monto debe ser mayor a cero');
+
+  const { rows } = await pool.query(
+    `INSERT INTO planilla_movimientos (tipo, monto, concepto, usuario_id)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [tipo, monto, concepto.trim(), usuarioId]
+  );
+  return rows[0];
+}
+
+// ------------------------------------------------------------
 // CLIENTES / CUENTA CORRIENTE
 // El saldo de cada cliente sale de vista_saldo_clientes (suma de
 // cargos menos suma de pagos), no se guarda como columna aparte.
@@ -871,6 +936,8 @@ module.exports = {
   listarSesionesCaja,
   registrarMovimientoCaja,
   listarMovimientosCaja,
+  listarPlanilla,
+  registrarMovimientoPlanilla,
   listarClientes,
   crearCliente,
   actualizarCliente,

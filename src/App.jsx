@@ -7,6 +7,7 @@ import Historial from './pantallas/Historial.jsx';
 import Caja from './pantallas/Caja.jsx';
 import Usuarios from './pantallas/Usuarios.jsx';
 import Clientes from './pantallas/Clientes.jsx';
+import Planilla from './pantallas/Planilla.jsx';
 
 export default function App() {
   const [usuarioActual, setUsuarioActual] = useState(null);
@@ -23,7 +24,10 @@ export default function App() {
     clientes: { label: 'Clientes', componente: <Clientes usuarioActual={usuarioActual} /> },
     caja: { label: 'Caja', componente: <Caja usuarioActual={usuarioActual} /> },
     ...(usuarioActual.rol === 'admin'
-      ? { usuarios: { label: 'Vendedores', componente: <Usuarios /> } }
+      ? {
+          planilla: { label: 'Bolsita', componente: <Planilla usuarioActual={usuarioActual} /> },
+          usuarios: { label: 'Vendedores', componente: <Usuarios /> },
+        }
       : {}),
   };
 

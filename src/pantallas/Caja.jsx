@@ -13,7 +13,7 @@ const ETIQUETA_METODO = {
 // extra), mostrando el tipo, el concepto que se cargó en su momento (el
 // motivo/detalle del retiro), el monto, la hora y quién lo registró.
 // Ej: Egreso: "Pago de luz" — $500.00 — 09:15 — por María
-function ListaMovimientos({ movimientos, conFecha }) {
+function ListaMovimientos({ movimientos, conFecha, esAdmin }) {
   if (movimientos.length === 0) {
     return <p className="nota">No hubo retiros, pagos ni ingresos extra en este turno.</p>;
   }
@@ -33,6 +33,7 @@ function ListaMovimientos({ movimientos, conFecha }) {
             ? new Date(m.creado_en).toLocaleString('es-AR', { hour12: false })
             : new Date(m.creado_en).toLocaleTimeString('es-AR', { hour12: false })}
           {m.usuario_nombre ? ` — por ${m.usuario_nombre}` : ''}
+          {esAdmin && m.en_planilla && <span className="nota"> — pasó a la bolsita</span>}
         </li>
       ))}
     </ul>
@@ -53,6 +54,10 @@ export default function Caja({ usuarioActual }) {
   const [tipoMov, setTipoMov] = useState('egreso');
   const [montoMov, setMontoMov] = useState('');
   const [conceptoMov, setConceptoMov] = useState('');
+  // Si el egreso es plata que se aparta (retiro Mer, bolsita), además
+  // entra como ingreso en la bolsita. Solo lo ven los administradores.
+  const esAdmin = usuarioActual?.rol === 'admin';
+  const [aPlanillaMov, setAPlanillaMov] = useState(false);
   const [errorMov, setErrorMov] = useState('');
 
   // Detalle de una caja del historial de abajo (resumen por método de pago
@@ -116,9 +121,13 @@ export default function Caja({ usuarioActual }) {
     e.preventDefault();
     setErrorMov('');
     try {
-      await window.api.caja.registrarMovimiento(caja.id, tipoMov, parseFloat(montoMov), conceptoMov, usuarioActual?.id ?? null);
+      await window.api.caja.registrarMovimiento(
+        caja.id, tipoMov, parseFloat(montoMov), conceptoMov, usuarioActual?.id ?? null,
+        esAdmin && tipoMov === 'egreso' && aPlanillaMov
+      );
       setMontoMov('');
       setConceptoMov('');
+      setAPlanillaMov(false);
       cargarTodo();
     } catch (err) {
       setErrorMov(err.message);
@@ -221,13 +230,22 @@ export default function Caja({ usuarioActual }) {
                 Concepto (ej: "Pago de luz", "Retiro para el banco")
                 <input required value={conceptoMov} onChange={(e) => setConceptoMov(e.target.value)} />
               </label>
+              {esAdmin && tipoMov === 'egreso' && (
+                <label>
+                  ¿A dónde va la plata?
+                  <select value={aPlanillaMov ? 'planilla' : 'ninguna'} onChange={(e) => setAPlanillaMov(e.target.value === 'planilla')}>
+                    <option value="ninguna">No va a la bolsita (pago de servicio, banco, etc.)</option>
+                    <option value="planilla">A la bolsita (retiro Mer)</option>
+                  </select>
+                </label>
+              )}
               <button type="submit">Registrar movimiento</button>
             </form>
 
             {movimientos.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <p style={{ fontWeight: 'bold', marginBottom: 4 }}>Movimientos de este turno:</p>
-                <ListaMovimientos movimientos={movimientos} conFecha={false} />
+                <ListaMovimientos movimientos={movimientos} conFecha={false} esAdmin={esAdmin} />
               </div>
             )}
           </div>
@@ -300,7 +318,7 @@ export default function Caja({ usuarioActual }) {
                       )}
 
                       <p style={{ margin: '10px 0 4px 0', fontWeight: 'bold' }}>Movimientos manuales del turno:</p>
-                      <ListaMovimientos movimientos={detalleSesion.movimientos} conFecha={true} />
+                      <ListaMovimientos movimientos={detalleSesion.movimientos} conFecha={true} esAdmin={esAdmin} />
                     </td>
                   </tr>
                 )}

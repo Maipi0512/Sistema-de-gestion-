@@ -62,6 +62,7 @@ falten, una sola vez cada una:
 \i 'C:/ruta/completa/al/proyecto/db/migracion-03-cuenta-corriente.sql'
 \i 'C:/ruta/completa/al/proyecto/db/migracion-04-seguridad-rls.sql'
 \i 'C:/ruta/completa/al/proyecto/db/migracion-05-caja-detalle.sql'
+\i 'C:/ruta/completa/al/proyecto/db/migracion-06-planilla.sql'
 ```
 
 ### 3. Instalar dependencias del proyecto
