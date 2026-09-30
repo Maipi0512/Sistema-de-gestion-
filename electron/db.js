@@ -98,6 +98,13 @@ async function verificarLogin(usuario, password) {
 // PRODUCTOS
 // ------------------------------------------------------------
 
+// Saca los acentos de una columna o parámetro SQL para que las búsquedas
+// no distingan "cafe" de "café". Se usa translate() (viene con Postgres)
+// en vez de la extensión unaccent, así no hace falta instalar nada.
+// La ñ se deja tal cual porque es otra letra, no un acento.
+const sinAcentos = (expr) =>
+  `translate(${expr}, 'áéíóúüàèìòùâêîôûÁÉÍÓÚÜÀÈÌÒÙÂÊÎÔÛ', 'aeiouuaeiouaeiouAEIOUUAEIOUAEIOU')`;
+
 // Si el producto tiene colores cargados, el stock que se muestra es la
 // suma del stock de cada color (el stock_actual de la fila de productos
 // deja de usarse para esos casos, cada color lleva su propia cantidad).
@@ -113,7 +120,7 @@ async function listarProductos(filtro = '') {
      FROM productos p
      LEFT JOIN producto_colores pc ON pc.producto_id = p.id
      WHERE p.activo = TRUE
-       AND ($1 = '' OR p.nombre ILIKE '%' || $1 || '%' OR p.codigo ILIKE '%' || $1 || '%')
+       AND ($1 = '' OR ${sinAcentos('p.nombre')} ILIKE '%' || ${sinAcentos('$1')} || '%' OR ${sinAcentos('p.codigo')} ILIKE '%' || ${sinAcentos('$1')} || '%')
      GROUP BY p.id
      ORDER BY p.nombre ASC`,
     [filtro]
@@ -750,7 +757,7 @@ async function listarClientes(filtro = '') {
   const { rows } = await pool.query(
     `SELECT * FROM vista_saldo_clientes
      WHERE activo = TRUE
-       AND ($1 = '' OR nombre ILIKE '%' || $1 || '%' OR telefono ILIKE '%' || $1 || '%')
+       AND ($1 = '' OR ${sinAcentos('nombre')} ILIKE '%' || ${sinAcentos('$1')} || '%' OR telefono ILIKE '%' || $1 || '%')
      ORDER BY nombre ASC`,
     [filtro]
   );
