@@ -1,14 +1,14 @@
 {
   "name": "almacen-costura-sistema",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Sistema de gestión de ventas y stock — Almacén de Costura",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
     "build": "vite build",
-    "electron:build": "vite build && electron-builder",
-    "electron:publish": "vite build && electron-builder --publish always"
+    "electron:build": "vite build && electron-builder --win",
+    "electron:publish": "vite build && electron-builder --win --publish always"
   },
   "build": {
     "appId": "com.almacencostura.sistema",
