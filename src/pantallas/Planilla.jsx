@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 // Bolsita (retiro Mer): la plata que se saca de la caja entra como
 // ingreso sola, desde Caja, al marcar el egreso "a la bolsita". Acá se
 // cargan a mano los gastos que se pagan con esa plata (egresos) y, si
-// hace falta, algún ingreso que no pasó por la caja. Solo para admin.
+// hace falta, algún ingreso que no pasó por la caja. La usan admin y vendedores.
 export default function Planilla({ usuarioActual }) {
   const [movimientos, setMovimientos] = useState([]);
   const [cargando, setCargando] = useState(true);

@@ -13,7 +13,7 @@ const ETIQUETA_METODO = {
 // extra), mostrando el tipo, el concepto que se cargó en su momento (el
 // motivo/detalle del retiro), el monto, la hora y quién lo registró.
 // Ej: Egreso: "Pago de luz" — $500.00 — 09:15 — por María
-function ListaMovimientos({ movimientos, conFecha, esAdmin }) {
+function ListaMovimientos({ movimientos, conFecha }) {
   if (movimientos.length === 0) {
     return <p className="nota">No hubo retiros, pagos ni ingresos extra en este turno.</p>;
   }
@@ -33,7 +33,7 @@ function ListaMovimientos({ movimientos, conFecha, esAdmin }) {
             ? new Date(m.creado_en).toLocaleString('es-AR', { hour12: false })
             : new Date(m.creado_en).toLocaleTimeString('es-AR', { hour12: false })}
           {m.usuario_nombre ? ` — por ${m.usuario_nombre}` : ''}
-          {esAdmin && m.en_planilla && <span className="nota"> — pasó a la bolsita</span>}
+          {m.en_planilla && <span className="nota"> — pasó a la bolsita</span>}
         </li>
       ))}
     </ul>
@@ -55,8 +55,7 @@ export default function Caja({ usuarioActual }) {
   const [montoMov, setMontoMov] = useState('');
   const [conceptoMov, setConceptoMov] = useState('');
   // Si el egreso es plata que se aparta (retiro Mer, bolsita), además
-  // entra como ingreso en la bolsita. Solo lo ven los administradores.
-  const esAdmin = usuarioActual?.rol === 'admin';
+  // entra como ingreso en la bolsita. Lo pueden usar admin y vendedores.
   const [aPlanillaMov, setAPlanillaMov] = useState(false);
   const [errorMov, setErrorMov] = useState('');
 
@@ -123,7 +122,7 @@ export default function Caja({ usuarioActual }) {
     try {
       await window.api.caja.registrarMovimiento(
         caja.id, tipoMov, parseFloat(montoMov), conceptoMov, usuarioActual?.id ?? null,
-        esAdmin && tipoMov === 'egreso' && aPlanillaMov
+        tipoMov === 'egreso' && aPlanillaMov
       );
       setMontoMov('');
       setConceptoMov('');
@@ -230,7 +229,7 @@ export default function Caja({ usuarioActual }) {
                 Concepto (ej: "Pago de luz", "Retiro para el banco")
                 <input required value={conceptoMov} onChange={(e) => setConceptoMov(e.target.value)} />
               </label>
-              {esAdmin && tipoMov === 'egreso' && (
+              {tipoMov === 'egreso' && (
                 <label>
                   ¿A dónde va la plata?
                   <select value={aPlanillaMov ? 'planilla' : 'ninguna'} onChange={(e) => setAPlanillaMov(e.target.value === 'planilla')}>
@@ -245,7 +244,7 @@ export default function Caja({ usuarioActual }) {
             {movimientos.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <p style={{ fontWeight: 'bold', marginBottom: 4 }}>Movimientos de este turno:</p>
-                <ListaMovimientos movimientos={movimientos} conFecha={false} esAdmin={esAdmin} />
+                <ListaMovimientos movimientos={movimientos} conFecha={false} />
               </div>
             )}
           </div>
@@ -318,7 +317,7 @@ export default function Caja({ usuarioActual }) {
                       )}
 
                       <p style={{ margin: '10px 0 4px 0', fontWeight: 'bold' }}>Movimientos manuales del turno:</p>
-                      <ListaMovimientos movimientos={detalleSesion.movimientos} conFecha={true} esAdmin={esAdmin} />
+                      <ListaMovimientos movimientos={detalleSesion.movimientos} conFecha={true} />
                     </td>
                   </tr>
                 )}

@@ -292,14 +292,14 @@ async function resumenCaja(sesionId) {
 // que no es una venta (ej: "Pago de luz", "Retiro para el banco").
 // Si es un egreso con aPlanilla = true (ej: "Retiro Mer", "Bolsita"),
 // esa plata además entra como ingreso en la bolsita; las dos filas se
-// guardan juntas o ninguna. Solo un administrador puede mandar plata
-// a la bolsita.
+// guardan juntas o ninguna. Cualquier usuario activo (admin o
+// vendedor) puede mandar plata a la bolsita.
 async function registrarMovimientoCaja(sesionId, tipo, monto, concepto, usuarioId = null, aPlanilla = false) {
   if (!['ingreso', 'egreso'].includes(tipo)) throw new Error('Tipo de movimiento inválido');
   if (!concepto || !concepto.trim()) throw new Error('El movimiento necesita un concepto');
   if (!monto || monto <= 0) throw new Error('El monto debe ser mayor a cero');
   if (aPlanilla && tipo !== 'egreso') throw new Error('Solo un egreso de la caja puede pasar a la bolsita');
-  if (aPlanilla) await exigirAdmin(usuarioId, 'Solo un administrador puede pasar plata a la bolsita');
+  if (aPlanilla) await exigirUsuarioActivo(usuarioId, 'Tenés que iniciar sesión para pasar plata a la bolsita');
 
   const client = await pool.connect();
   try {
@@ -775,18 +775,18 @@ async function stockBajo() {
 // BOLSITA (retiro Mer)
 // Los ingresos llegan desde Caja (egresos marcados "a la bolsita");
 // los egresos son lo que se gasta de esa plata y se cargan a mano
-// desde la pantalla Bolsita. Solo la ven los administradores.
+// desde la pantalla Bolsita. La usan administradores y vendedores.
 // ------------------------------------------------------------
 
-async function exigirAdmin(usuarioId, mensaje) {
-  const { rows } = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [usuarioId]);
-  if (rows.length === 0 || rows[0].rol !== 'admin') throw new Error(mensaje);
+async function exigirUsuarioActivo(usuarioId, mensaje) {
+  const { rows } = await pool.query('SELECT activo FROM usuarios WHERE id = $1', [usuarioId]);
+  if (rows.length === 0 || !rows[0].activo) throw new Error(mensaje);
 }
 
 // Movimientos de la planilla en orden cronológico, cada uno con el
 // saldo acumulado hasta ese renglón (como una planilla en papel).
 async function listarPlanilla(usuarioId) {
-  await exigirAdmin(usuarioId, 'Solo un administrador puede ver la bolsita');
+  await exigirUsuarioActivo(usuarioId, 'Tenés que iniciar sesión para ver la bolsita');
   const { rows } = await pool.query(
     `SELECT pm.*, u.nombre AS usuario_nombre,
        SUM(CASE WHEN pm.tipo = 'ingreso' THEN pm.monto ELSE -pm.monto END)
@@ -799,7 +799,7 @@ async function listarPlanilla(usuarioId) {
 }
 
 async function registrarMovimientoPlanilla(tipo, monto, concepto, usuarioId = null) {
-  await exigirAdmin(usuarioId, 'Solo un administrador puede cargar movimientos en la bolsita');
+  await exigirUsuarioActivo(usuarioId, 'Tenés que iniciar sesión para cargar movimientos en la bolsita');
   if (!['ingreso', 'egreso'].includes(tipo)) throw new Error('Tipo de movimiento inválido');
   if (!concepto || !concepto.trim()) throw new Error('El movimiento necesita un concepto');
   if (!monto || monto <= 0) throw new Error('El monto debe ser mayor a cero');
