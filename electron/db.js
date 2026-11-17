@@ -192,6 +192,27 @@ async function actualizarProducto(id, cambios) {
   return rows[0];
 }
 
+// Eliminar un producto = darlo de baja (activo = FALSE): deja de aparecer
+// en Productos, Vender y el Excel, pero las ventas viejas que lo
+// incluyen siguen intactas. El código se libera para poder reusarlo en
+// un producto nuevo. Solo admin o quien tenga permiso de editar productos.
+async function eliminarProducto(id, usuarioId) {
+  const { rows: u } = await pool.query(
+    'SELECT rol, activo, puede_editar_productos FROM usuarios WHERE id = $1',
+    [usuarioId]
+  );
+  if (u.length === 0 || !u[0].activo || (u[0].rol !== 'admin' && !u[0].puede_editar_productos)) {
+    throw new Error('No tenés permiso para eliminar productos');
+  }
+  const { rows } = await pool.query(
+    `UPDATE productos SET activo = FALSE, codigo = NULL, actualizado_en = NOW()
+     WHERE id = $1 AND activo = TRUE RETURNING id`,
+    [id]
+  );
+  if (rows.length === 0) throw new Error('Producto no encontrado');
+  return { id };
+}
+
 async function ajustarStock(id, cantidad, motivo = 'ajuste_manual', notas = '') {
   const client = await pool.connect();
   try {
@@ -914,6 +935,7 @@ module.exports = {
   actualizarPermisoProducto,
   verificarLogin,
   listarProductos,
+  eliminarProducto,
   crearProducto,
   actualizarProducto,
   ajustarStock,

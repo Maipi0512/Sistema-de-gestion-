@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
     listar: (filtro) => ipcRenderer.invoke('productos:listar', filtro),
     crear: (producto) => ipcRenderer.invoke('productos:crear', producto),
     actualizar: (id, cambios) => ipcRenderer.invoke('productos:actualizar', id, cambios),
+    eliminar: (id, usuarioId) => ipcRenderer.invoke('productos:eliminar', id, usuarioId),
     ajustarStock: (id, cantidad, motivo, notas) =>
       ipcRenderer.invoke('productos:ajustarStock', id, cantidad, motivo, notas),
     agregarColor: (productoId, color) => ipcRenderer.invoke('productos:agregarColor', productoId, color),

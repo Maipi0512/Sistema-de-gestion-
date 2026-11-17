@@ -29,9 +29,25 @@ export default function Productos({ usuarioActual }) {
   const [colorInput, setColorInput] = useState('');
   const [coloresSugeridos, setColoresSugeridos] = useState([]);
   const [sumaStock, setSumaStock] = useState({});
+  // Id del producto que se está por eliminar, para pedir confirmación
+  // en la misma fila (Electron no implementa bien window.confirm).
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(null);
+  const [errorEliminar, setErrorEliminar] = useState('');
 
   const cargarProductos = (filtro = '') => {
     window.api.productos.listar(filtro).then(setProductos);
+  };
+
+  const handleEliminar = async (p) => {
+    setErrorEliminar('');
+    try {
+      await window.api.productos.eliminar(p.id, usuarioActual?.id ?? null);
+      if (editandoId === p.id) cancelarForm();
+      setConfirmandoEliminar(null);
+      cargarProductos(busqueda);
+    } catch (err) {
+      setErrorEliminar(err.message);
+    }
   };
 
   const cargarColoresSugeridos = () => {
@@ -338,6 +354,8 @@ export default function Productos({ usuarioActual }) {
         </form>
       )}
 
+      {errorEliminar && <p className="error">Error: {errorEliminar}</p>}
+
       <table className="tabla">
         <thead>
           <tr>
@@ -404,7 +422,19 @@ export default function Productos({ usuarioActual }) {
                 )}
               </td>
               <td>
-                {puedeEditar && <button onClick={() => handleEditar(p)}>Editar</button>}
+                {puedeEditar && confirmandoEliminar !== p.id && (
+                  <>
+                    <button onClick={() => handleEditar(p)}>Editar</button>{' '}
+                    <button onClick={() => setConfirmandoEliminar(p.id)}>Eliminar</button>
+                  </>
+                )}
+                {puedeEditar && confirmandoEliminar === p.id && (
+                  <>
+                    <div style={{ fontSize: 13, marginBottom: 4 }}>¿Eliminar "{p.nombre}"?</div>
+                    <button onClick={() => handleEliminar(p)}>Sí, eliminar</button>{' '}
+                    <button onClick={() => setConfirmandoEliminar(null)}>No</button>
+                  </>
+                )}
               </td>
             </tr>
           ))}
